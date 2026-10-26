@@ -1,0 +1,809 @@
+{
+  "adults": 36,
+  "children": 0,
+  "data": {
+    "breakfast": {
+      "title": "2 ארוחות בוקר",
+      "hint": "כל מוצרי תעודת המשלוח 5193774, לפי הכמות שסופקה. מוצרים שלא סופקו נשארו ברשימה ומסומנים בהערה.",
+      "items": [
+        {
+          "id": "seed-1",
+          "name": "מלפפונים במלח קטנים 560 גרם",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-2",
+          "name": "פלפל שחור שלם 640 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-3",
+          "name": "טחינה גולמית אל ארז 500 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-4",
+          "name": "טחינה מלאה אל ארז 500 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-5",
+          "name": "שוופס סודה 4×1.5 ליטר",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-6",
+          "name": "מיני בראוניז 5×20 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-7",
+          "name": "קפסולות אספרסו קלאסי מארז 5×25 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-8",
+          "name": "צ׳יריוס דבש שקד נסטלה 500 גרם",
+          "qty": "4",
+          "note": "",
+          "baseQty": "4",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-9",
+          "name": "פריכיות אורז ביתי 10×100 גרם דגניות",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-10",
+          "name": "לחם פשוט מלא 750 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-11",
+          "name": "לחמניות לסנדוויץ׳ 10×75 גרם",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-12",
+          "name": "טורטיות קמח חיטה 780 גרם",
+          "qty": "4",
+          "note": "",
+          "baseQty": "4",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-13",
+          "name": "פסטו קלאסי 220 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-14",
+          "name": "חומוס מסעדה צבר 700 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-15",
+          "name": "סלט כרוב אדום 400 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-16",
+          "name": "סלט מטבוחה פיקנטי 400 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-17",
+          "name": "מלח ים דק 250 גרם מלח הארץ",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-18",
+          "name": "שמן זית כתית 750 מ״ל MATTEO",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-19",
+          "name": "ביצים ארוזות 18 יח׳ L",
+          "qty": "3",
+          "note": "",
+          "baseQty": "3",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-20",
+          "name": "חלב בקרטון 3% שומן 1 ליטר",
+          "qty": "5",
+          "note": "",
+          "baseQty": "5",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-21",
+          "name": "מעדן פרחים גבינת שמנת 250 גרם איזי",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-22",
+          "name": "פומלה אדומה אמריקאית/אפריקאית 2 ק״ג",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-23",
+          "name": "קלינקס לושן 3 שכבות 75 יח׳",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-24",
+          "name": "מגבוני נייר 6 גלילים XPO",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-25",
+          "name": "דאב ספריי טלק סופט 150",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-26",
+          "name": "גרנולה עשירה 500 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-27",
+          "name": "סלמון מעושן 100 גרם",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-28",
+          "name": "סרוולד קלאסי פרימיום 150 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-29",
+          "name": "סלמי קוניאק דק דק",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-30",
+          "name": "תבניות אלומיניום גדולות XPO",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-31",
+          "name": "זיתי קלמטה אורגניים 300 גרם",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-32",
+          "name": "מברשת ניקוי לגריל WEBER",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-33",
+          "name": "גבינה צהובה נעם 28% פרוסה 400 גרם",
+          "qty": "0.80 ק״ג",
+          "note": "הוזמנו 2 יח׳; סופקו 0.80 ק״ג",
+          "baseQty": "0.80 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-34",
+          "name": "אבוקדו בשל מארז",
+          "qty": "0",
+          "note": "הוזמנו 2 יח׳; לא סופק",
+          "baseQty": "0",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-35",
+          "name": "אבוקדו בשל",
+          "qty": "0",
+          "note": "הוזמנו 2 יח׳; לא סופק",
+          "baseQty": "0",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-36",
+          "name": "מארז תפוחים סמיט",
+          "qty": "0.96 ק״ג",
+          "note": "הוזמנה יחידה אחת",
+          "baseQty": "0.96 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-37",
+          "name": "אגס ארוז 8 יחידות",
+          "qty": "1.09 ק״ג",
+          "note": "הוזמנה יחידה אחת",
+          "baseQty": "1.09 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-38",
+          "name": "מארז תפוחים פינק ליידי",
+          "qty": "0.95 ק״ג",
+          "note": "הוזמנה יחידה אחת",
+          "baseQty": "0.95 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-39",
+          "name": "לימון טרי ארוז 10 יח׳",
+          "qty": "1.33 ק״ג",
+          "note": "הוזמנה יחידה אחת",
+          "baseQty": "1.33 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-40",
+          "name": "עלי חסה ערבית שטופים",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-41",
+          "name": "חציל",
+          "qty": "1.90 ק״ג",
+          "note": "הוזמנו 4 יח׳",
+          "baseQty": "1.90 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-42",
+          "name": "עגבניות שרי לובלו",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-43",
+          "name": "עגבנייה ארוזה 8 יחידות",
+          "qty": "2.28 ק״ג",
+          "note": "הוזמנו 3 יח׳",
+          "baseQty": "2.28 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-44",
+          "name": "מלפפון ארוז 10 יחידות",
+          "qty": "3.29 ק״ג",
+          "note": "הוזמנו 3 יח׳",
+          "baseQty": "3.29 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-45",
+          "name": "פלפל אדום ארוז 3 יח׳",
+          "qty": "1.15 ק״ג",
+          "note": "הוזמנו 2 יח׳",
+          "baseQty": "1.15 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-46",
+          "name": "פלפל צהוב ארוז",
+          "qty": "0.98 ק״ג",
+          "note": "הוזמנו 2 יח׳",
+          "baseQty": "0.98 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-47",
+          "name": "מארז עגבניות שרי צהוב",
+          "qty": "0",
+          "note": "הוזמנה יחידה אחת; לא סופק",
+          "baseQty": "0",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-48",
+          "name": "עגבניות שרי צהוב",
+          "qty": "1",
+          "note": "תחליף שסופק",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-49",
+          "name": "בצל יבש ארוז",
+          "qty": "2.04 ק״ג",
+          "note": "הוזמנו 2 יח׳",
+          "baseQty": "2.04 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-50",
+          "name": "בצל אדום ארוז",
+          "qty": "1.24 ק״ג",
+          "note": "הוזמנו 2 יח׳",
+          "baseQty": "1.24 ק״ג",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-51",
+          "name": "מארז שום יבש 4 יחידות",
+          "qty": "0",
+          "note": "הוזמנו 2 יח׳; לא סופק",
+          "baseQty": "0",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-52",
+          "name": "שום יבוא מובחר",
+          "qty": "2",
+          "note": "תחליף שסופק",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-53",
+          "name": "תרסיס מסיר כתמים 750 מ״ל XPO",
+          "qty": "1",
+          "note": "",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-54",
+          "name": "קוטג׳ 5% 250 גרם",
+          "qty": "8",
+          "note": "",
+          "baseQty": "8",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-55",
+          "name": "גבינה לבנה 5% שומן 500 גרם",
+          "qty": "3",
+          "note": "",
+          "baseQty": "3",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-56",
+          "name": "גאודה מגורדת 200 גרם",
+          "qty": "2",
+          "note": "",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-57",
+          "name": "מולר אקטיב משקה חלבון לבן 25 גרם",
+          "qty": "12",
+          "note": "",
+          "baseQty": "12",
+          "scale": false,
+          "done": false,
+          "who": ""
+        }
+      ]
+    },
+    "bbq": {
+      "title": "שישי על האש",
+      "hint": "הפריטים הקיימים בגיליון נשמרו כאן. אפשר להרחיב כשתעלה את התוכן המלא.",
+      "items": [
+        {
+          "id": "seed-58",
+          "name": "חצילים",
+          "qty": "5",
+          "note": "",
+          "baseQty": "5",
+          "scale": true,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-59",
+          "name": "קישואים",
+          "qty": "8",
+          "note": "",
+          "baseQty": "8",
+          "scale": true,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-60",
+          "name": "בצל לבן",
+          "qty": "",
+          "note": "",
+          "baseQty": "",
+          "scale": true,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-61",
+          "name": "תבניות חד״פ",
+          "qty": "",
+          "note": "",
+          "baseQty": "",
+          "scale": true,
+          "done": false,
+          "who": ""
+        }
+      ]
+    },
+    "alcohol": {
+      "title": "אלכוהול",
+      "hint": "הוזמן במנו וינו · הזמנה 594658 · סה״כ ₪1,050.6 כולל משלוח. הכמויות כבר קבועות מההזמנה.",
+      "items": [
+        {
+          "id": "seed-62",
+          "name": "שישיית פחיות סאן מיגל שליש",
+          "qty": "2",
+          "note": "₪66",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-63",
+          "name": "שישיית בקבוקי סטלה 330 מ״ל",
+          "qty": "2",
+          "note": "₪74",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-64",
+          "name": "אוזו פלומרי",
+          "qty": "1",
+          "note": "₪82",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-65",
+          "name": "מונשיין סינגל מאלט",
+          "qty": "1",
+          "note": "₪219",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-66",
+          "name": "בירה שישיית פחיות בדווייזר",
+          "qty": "1",
+          "note": "₪33",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-67",
+          "name": "בירה שישיית פחיות בקס",
+          "qty": "1",
+          "note": "₪33",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-68",
+          "name": "מוסקדה ״מגדלים״ (טורמלין)",
+          "qty": "1",
+          "note": "₪49",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-69",
+          "name": "ורגה סואבה",
+          "qty": "1",
+          "note": "₪49 · המלצה של מנו",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-70",
+          "name": "לה פטי פשור לבן",
+          "qty": "2",
+          "note": "₪98 · המלצה של מנו",
+          "baseQty": "2",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-71",
+          "name": "ג׳אנלה בראנקה לבן",
+          "qty": "1",
+          "note": "₪49",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-72",
+          "name": "אקי אנטיגל סוביניון בלאן",
+          "qty": "1",
+          "note": "₪49",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-73",
+          "name": "ורגה מטאוטי אמיליה רוזה",
+          "qty": "1",
+          "note": "₪49",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-74",
+          "name": "לה פטי פשור אדום",
+          "qty": "1",
+          "note": "₪49",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-75",
+          "name": "אוז שיראז",
+          "qty": "1",
+          "note": "₪49 · המלצה של מנו",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-76",
+          "name": "אל גוארדיאן ריוחה ויורה",
+          "qty": "1",
+          "note": "₪49 · התערבות מינימלית",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-77",
+          "name": "שאטו דה לה קומרייס פול בלאנש לבן משוגע",
+          "qty": "1",
+          "note": "₪85",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        },
+        {
+          "id": "seed-78",
+          "name": "שאטו דה לה קומרייס פול בלאנש לבן משוגע",
+          "qty": "1",
+          "note": "מתנה",
+          "baseQty": "1",
+          "scale": false,
+          "done": false,
+          "who": ""
+        }
+      ]
+    },
+    "general": {
+      "title": "כללי",
+      "hint": "ציוד, נשנושים וכל דבר שלא שייך לארוחה מסוימת.",
+      "items": []
+    }
+  }
+}
