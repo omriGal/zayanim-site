@@ -16,7 +16,7 @@ test('the starting template is valid and has the next weekend', () => {
   const s = defaultState();
   assert(validState(s));
   assert.equal(s.event.date, '2027-05-20');
-  assert.deepEqual(Object.keys(s.lists), ['meat', 'alcohol', 'general', 'breakfast']);
+  assert.deepEqual(Object.keys(s.lists), ['meat', 'alcohol', 'general', 'breakfast', 'dinner']);
   assert(s.lists.breakfast.some(i => i.name === 'ביצים'));
 });
 
@@ -146,6 +146,6 @@ test('a new weekend keeps families, lists and lessons, resets the rest', () => {
   assert.equal(s.people[0].coming, null);
   assert.equal(s.buyers.meat, null);
   assert.equal(s.expenses.length, 0);
-  assert.deepEqual(s.past[0], { id: oldId, title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: 'טרה קוטה', total: 12345, families: 3 });
+  assert.deepEqual(s.past[0], { id: oldId, title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: 'אחוזת טרה קוטה, מעונה', total: 12345, families: 3 });
   assert(validState(s));
 });

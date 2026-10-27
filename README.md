@@ -4,7 +4,7 @@ The group's twice-a-year zimmer weekend, on one page (Hebrew, phone-first), foll
 
 1. **Place** - zimmer, dates (Thursday to Saturday), link, check-in.
 2. **Who's coming** - each family answers coming / not coming; adults, kids and vegetarians set the quantities.
-3. **Roles** - one family each for the grill, alcohol, general shopping and breakfast, each with its shopping list.
+3. **Roles** - one family each for the grill, alcohol, general shopping, breakfast and the first dinner (Thursday potluck), each with its list.
 4. **Extra gear** - kitchen, grill and fire, general; each item assigned to a family. Plus a personal packing list.
 5. **Settling up** - receipts go in as they're paid; split equally per family (with a weight, e.g. ½ for someone alone),
    families can opt out of a category, and the page lists the fewest transfers that settle everyone.

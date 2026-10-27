@@ -1,10 +1,10 @@
 // Shared data model for the weekend: used by both the page and the server,
 // so validation, edits and the settlement math are identical on both sides.
-import { LISTS_TEMPLATE, GEAR_TEMPLATE, NOTES_TEMPLATE } from './template.js';
+import { LISTS_TEMPLATE, GEAR_TEMPLATE, NOTES_TEMPLATE, PLACE } from './template.js';
 
-// The four jobs the group hands out every time, in the order they are handed out.
-export const LISTS = ['meat', 'alcohol', 'general', 'breakfast'];
-export const LIST_LABELS = { meat: 'מנגל', alcohol: 'אלכוהול', general: 'קניות כלליות', breakfast: 'ארוחת בוקר' };
+// The jobs the group hands out every time, in the order they are handed out.
+export const LISTS = ['meat', 'alcohol', 'general', 'breakfast', 'dinner'];
+export const LIST_LABELS = { meat: 'מנגל', alcohol: 'אלכוהול', general: 'קניות כלליות', breakfast: 'ארוחת בוקר', dinner: 'ארוחת ערב ראשונה' };
 export const CATEGORIES = [...LISTS, 'lodging', 'other'];
 export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'הצימר', other: 'אחר' };
 export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
@@ -33,7 +33,7 @@ export function newId() {
 export function defaultState() {
   return {
     version: 5,
-    event: { id: newId(), title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: 'טרה קוטה', link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: '', notes: '' },
+    event: { id: newId(), title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: PLACE.place, link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: PLACE.checkin, notes: PLACE.details.join('\n') },
     people: [],
     buyers: Object.fromEntries(LISTS.map(k => [k, null])),
     lists: Object.fromEntries(LISTS.map(k => [k, LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }))])),
@@ -47,7 +47,17 @@ export function defaultState() {
 
 // Fills in fields added after a weekend was first saved, so older saved data stays valid.
 export function upgrade(s) {
-  for (const g of s?.gear ?? []) g.skipped ??= false;
+  if (!s) return s;
+  for (const g of s.gear ?? []) g.skipped ??= false;
+  // Roles added later (first dinner) start empty, with their template list and notes.
+  for (const k of LISTS) {
+    if (s.buyers && !(k in s.buyers)) s.buyers[k] = null;
+    if (s.lists && !s.lists[k]) s.lists[k] = LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }));
+    if (s.notes && !(k in s.notes)) s.notes[k] = NOTES_TEMPLATE[k].join('\n');
+  }
+  // The next zimmer's details arrived after the weekend was first saved.
+  const e = s.event;
+  if (e && e.place === 'טרה קוטה' && !e.notes) Object.assign(e, { place: PLACE.place, checkin: e.checkin || PLACE.checkin, notes: PLACE.details.join('\n') });
   return s;
 }
 

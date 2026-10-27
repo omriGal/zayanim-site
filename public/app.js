@@ -15,7 +15,7 @@ const TABS = [
   { id: 'money', label: 'חשבון', icon: icon('<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 11.5h6M9 15h3"/>') },
   { id: 'people', label: 'משפחות', icon: icon('<circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.4"/><path d="M3 19.5c.6-3.4 2.8-5.2 5.5-5.2s4.9 1.8 5.5 5.2M14 15c.8-.5 1.6-.7 2.5-.7 2.2 0 3.9 1.5 4.5 4.2"/>') },
 ];
-const BUY_LABELS = { meat: 'את המנגל', alcohol: 'את האלכוהול', general: 'את הקניות הכלליות', breakfast: 'את ארוחת הבוקר' };
+const BUY_LABELS = { meat: 'את המנגל', alcohol: 'את האלכוהול', general: 'את הקניות הכלליות', breakfast: 'את ארוחת הבוקר', dinner: 'על ארוחת הערב הראשונה' };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -344,7 +344,9 @@ function homeView() {
     </section>`;
   return `
   ${step(1, e.place && e.date, 'קובעים מקום',
-    `<p>${e.place ? `<b>${esc(e.place)}</b>` : 'עוד לא נקבע'}${e.date ? ` · ${esc(eventWhen())}` : ''}${e.checkin ? ` · ${esc(e.checkin)}` : ''}</p>`,
+    `<p>${e.place ? `<b>${esc(e.place)}</b>` : 'עוד לא נקבע'}${e.date ? ` · ${esc(eventWhen())}` : ''}${e.checkin ? ` · ${esc(e.checkin)}` : ''}</p>
+     ${e.notes ? `<ul class="place-details">${e.notes.split('\n').map(l => l.trim()).filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
+     ${e.link ? `<p class="small"><a href="${esc(e.link)}" target="_blank" rel="noopener">לדף הצימר ↗</a></p>` : ''}`,
     `<button class="btn sm" data-act="editEvent">${e.place ? 'עריכה' : 'קביעת מקום ותאריך'}</button>`)}
   ${step(2, state.people.length && !noAnswer.length, 'מי מגיע',
     state.people.length
@@ -591,7 +593,7 @@ function eventDialog() {
     <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר">
     <label>קישור לצימר</label><input type="text" name="link" value="${esc(e.link)}" maxlength="300" placeholder="https://…" inputmode="url">
     <label>צ׳ק אין</label><input type="text" name="checkin" value="${esc(e.checkin)}" maxlength="120" placeholder="למשל: צ׳ק אין 14:30">
-    <label>הערות לכולם</label><input type="text" name="notes" value="${esc(e.notes)}" maxlength="2000" placeholder="חניה, בריכה, מה יש במטבח…">
+    <label>פרטים על המקום (שורה לכל פרט)</label><textarea name="notes" rows="7" maxlength="2000" placeholder="בריכה, מנגלים, חדרים, טלפון…">${esc(e.notes)}</textarea>
     <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
   d => {
     const link = d.link.trim();
