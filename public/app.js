@@ -110,6 +110,7 @@ function pickCameo(list, itemName = '', adding = false) {
 }
 
 function cameoFor(op, before) {
+  if (op.type === 'updateGear' && op.fields?.skipped) return showCameo(photos['not-needed'] ? 'not-needed' : '');
   const list = op.list || (tab === 'shop' ? shopList : '');
   const named = arr => arr?.find(x => x.id === op.id)?.name;
   const itemName = op.name || named(before.lists[op.list]) || named(before.gear) || '';
@@ -200,7 +201,7 @@ async function login(c) {
     $('gate').hidden = true;
     $('app').hidden = false;
     accept(data);
-    loadPhotos().then(morning);
+    loadPhotos().then(() => { render(); morning(); });
   } catch (e) {
     if (e.status === 401) { local.del(CODE_KEY); code = ''; }
     showGate(e.status === 401 ? 'הקוד לא נכון' : e.message);
@@ -329,7 +330,7 @@ function homeView() {
   const yes = coming(state).length;
   const noAnswer = state.people.filter(p => p.coming === null);
   const rolesOpen = LISTS.filter(k => !state.buyers[k]).length;
-  const gearOpen = state.gear.filter(g => !g.who).length;
+  const gearOpen = state.gear.filter(g => !g.who && !g.skipped).length;
   const sum = total(state);
   const { transfers } = settle(state);
   const openPay = transfers.filter(t => !state.paid.includes(t.key)).length;
@@ -419,18 +420,26 @@ function notesBlock(section) {
 }
 
 function gearView() {
-  const missing = state.gear.filter(g => !g.who).length;
+  const needed = state.gear.filter(g => !g.skipped);
+  const skipped = state.gear.filter(g => g.skipped);
+  const missing = needed.filter(g => !g.who).length;
+  // The "את זה לא צריך" guy's face: skips an item for this weekend only.
+  const face = photos['not-needed'] ? `<img src="${photos['not-needed']}" alt="">` : 'לא';
   return `
   ${noPeopleHint()}
   <section class="card">
     <h2>ציוד שחוזר כל פעם <small>${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</small></h2>
-    ${state.gear.length ? `<ul class="rows">${state.gear.map(g => `
+    ${needed.length ? `<ul class="rows">${needed.map(g => `
       <li class="row ${g.done ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="ארוז">
         <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
         <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
-        <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
-      </li>`).join('')}</ul>` : '<div class="empty">אין ציוד ברשימה</div>'}
+        <button class="nope" data-act="skipGear" data-id="${g.id}" title="הפעם לא צריך" aria-label="הפעם לא צריך">${face}</button>
+      </li>`).join('')}</ul>` : '<div class="empty">הפעם לא צריך כלום</div>'}
+    ${skipped.length ? `<div class="skipped">
+      <b>הפעם לא צריך</b> <span class="small muted">יחזרו לרשימה בסופ״ש הבא</span>
+      <div class="skipped-list">${skipped.map(g => `<button class="pill" data-act="unskipGear" data-id="${g.id}">${esc(g.name)} ↺</button>`).join('')}</div>
+    </div>` : ''}
     <form class="quick" data-form="addGear" style="grid-template-columns:1fr 46px">
       <input type="text" id="q-gear" data-keep name="name" placeholder="עוד משהו להביא…" maxlength="120" required autocomplete="off">
       <button class="btn" aria-label="הוספה">+</button>
@@ -728,6 +737,8 @@ $('view').addEventListener('click', e => {
       (f, action) => action === 'delete' ? send({ type: 'removeGear', id }) : send({ type: 'updateGear', id, fields: { name: f.name.trim() } }));
     }
     case 'removeGear': return send({ type: 'removeGear', id });
+    case 'skipGear': return send({ type: 'updateGear', id, fields: { skipped: true } });
+    case 'unskipGear': return send({ type: 'updateGear', id, fields: { skipped: false } });
     case 'addExpense':
       if (!state.people.length) return toast('הוסיפו קודם משפחות');
       return expenseDialog(null, cat);

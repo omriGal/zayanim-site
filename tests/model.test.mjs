@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, defaultState, validState, settle, total, adults, kids } from '../public/model.js';
+import { applyOp, defaultState, validState, upgrade, settle, total, adults, kids } from '../public/model.js';
 
 function weekend() {
   let s = defaultState();
@@ -58,6 +58,22 @@ test('families who are not coming drop out of the counts and the bill', () => {
   assert.equal(share.yossi, 0);
   assert.equal(share.dani, 20000);   // ₪300 over weights 1 + ½ (avi hasn't answered, so still pays)
   assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'maybe' } }));
+});
+
+test('gear marked "not needed this time" comes back next weekend', () => {
+  let s = weekend();
+  const id = s.gear[0].id;
+  s = applyOp(s, { type: 'updateGear', id, fields: { skipped: true } });
+  assert.equal(s.gear[0].skipped, true);
+  s = applyOp(s, { type: 'newEvent', id: 'next', title: 'הבא' });
+  assert.equal(s.gear[0].skipped, false);
+});
+
+test('older saved data without the skip flag is upgraded', () => {
+  const s = defaultState();
+  for (const g of s.gear) delete g.skipped;
+  assert(!validState(s));
+  assert(validState(upgrade(s)));
 });
 
 test('each section keeps free-text notes, and families a phone number', () => {

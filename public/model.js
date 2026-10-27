@@ -37,12 +37,18 @@ export function defaultState() {
     people: [],
     buyers: Object.fromEntries(LISTS.map(k => [k, null])),
     lists: Object.fromEntries(LISTS.map(k => [k, LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }))])),
-    gear: GEAR_TEMPLATE.map(name => ({ id: newId(), name, who: null, done: false })),
+    gear: GEAR_TEMPLATE.map(name => ({ id: newId(), name, who: null, done: false, skipped: false })),
     notes: Object.fromEntries(SECTIONS.map(k => [k, NOTES_TEMPLATE[k].join('\n')])),
     expenses: [],
     paid: [],
     past: [],
   };
+}
+
+// Fills in fields added after a weekend was first saved, so older saved data stays valid.
+export function upgrade(s) {
+  for (const g of s?.gear ?? []) g.skipped ??= false;
+  return s;
 }
 
 export function validState(s) {
@@ -75,7 +81,7 @@ export function validState(s) {
 
   if (!Array.isArray(s.gear) || s.gear.length > LIMITS.gear) return false;
   for (const g of s.gear) {
-    if (!onlyKeys(g, ['id', 'name', 'who', 'done']) || !fresh(g.id) || !name(g.name) || !person(g.who) || typeof g.done !== 'boolean') return false;
+    if (!onlyKeys(g, ['id', 'name', 'who', 'done', 'skipped']) || !fresh(g.id) || !name(g.name) || !person(g.who) || typeof g.done !== 'boolean' || typeof g.skipped !== 'boolean') return false;
   }
 
   if (!onlyKeys(s.notes, SECTIONS) || !SECTIONS.every(k => text(s.notes[k], 3000))) return false;
@@ -148,10 +154,10 @@ export function applyOp(state, op) {
       break;
 
     case 'addGear':
-      s.gear.push({ id: op.id, name: str(op.name), who: op.who ?? null, done: false });
+      s.gear.push({ id: op.id, name: str(op.name), who: op.who ?? null, done: false, skipped: false });
       break;
     case 'updateGear':
-      Object.assign(find(s.gear, op.id), pick(op.fields, ['name', 'who', 'done']));
+      Object.assign(find(s.gear, op.id), pick(op.fields, ['name', 'who', 'done', 'skipped']));
       break;
     case 'removeGear':
       find(s.gear, op.id);
@@ -189,7 +195,8 @@ export function applyOp(state, op) {
       s.past = s.past.slice(0, LIMITS.past);
       s.event = { id: op.id, title: str(op.title), date: op.date ?? '', place: str(op.place), link: '', checkin: '', notes: '' };
       for (const k of LISTS) for (const it of s.lists[k]) { it.done = false; it.who = null; }
-      for (const g of s.gear) { g.done = false; g.who = null; }
+      // 'Not needed this time' only lasts one weekend.
+      for (const g of s.gear) { g.done = false; g.who = null; g.skipped = false; }
       for (const p of s.people) p.coming = null;
       s.buyers = Object.fromEntries(LISTS.map(k => [k, null]));
       s.expenses = [];
