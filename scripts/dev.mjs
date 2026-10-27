@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
 import { makeHandler } from '../lib/api.mjs';
-import { makePhotoHandler } from '../lib/photos.mjs';
+import { makePhotoHandler, fileStore } from '../lib/photos.mjs';
 import { MemoryStore } from '../tests/memory-store.mjs';
 
 const PORT = Number(process.env.PORT) || 8888;
@@ -14,7 +14,9 @@ const root = new URL('../public/', import.meta.url).pathname.replace(/^\/(\w:)/,
 const stores = { false: new MemoryStore(), true: new MemoryStore() };
 const env = { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(CODE).digest('hex') };
 const api = makeHandler({ storeFor: t => stores[t], env });
-const photo = makePhotoHandler({ env });
+// Photos: uploads stay in memory, otherwise fall back to photos/ on disk.
+const uploaded = new Map();
+const photo = makePhotoHandler({ env, store: { get: async n => uploaded.get(n) ?? fileStore.get(n), set: async (n, b) => { uploaded.set(n, b); } } });
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json' };
 
 createServer(async (req, res) => {

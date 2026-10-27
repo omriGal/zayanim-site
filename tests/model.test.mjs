@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, defaultState, validState, settle, total, adults, kids, LESSONS } from '../public/model.js';
+import { applyOp, defaultState, validState, settle, total, adults, kids } from '../public/model.js';
 
 function weekend() {
   let s = defaultState();
@@ -31,7 +31,8 @@ test('rejects bad data', () => {
   assert.throws(() => pay(s, 'e1', 'dani', -5, 'meat'));
   assert.throws(() => pay(s, 'e1', 'dani', 10.5, 'meat'), 'amounts are whole agorot');
   assert.throws(() => applyOp(s, { type: 'setBuyer', list: 'nope', person: 'dani' }));
-  assert.throws(() => applyOp(s, { type: 'addGear', id: 'g', group: 'toString', name: 'x' }));
+  assert.throws(() => applyOp(s, { type: 'setNotes', section: 'toString', text: 'x' }));
+  assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { phone: 'call me' } }));
   assert.throws(() => applyOp(s, { type: 'setEvent', fields: { link: 'javascript:alert(1)' } }));
   assert.throws(() => applyOp(s, { type: 'updateItem', list: 'meat', id: 'missing', fields: { done: true } }));
   assert.throws(() => applyOp(s, { type: 'hack' }));
@@ -59,11 +60,13 @@ test('families who are not coming drop out of the counts and the bill', () => {
   assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'maybe' } }));
 });
 
-test('lessons are kept per item', () => {
+test('each section keeps free-text notes, and families a phone number', () => {
   let s = weekend();
-  const id = s.lists.alcohol[0].id;
-  s = applyOp(s, { type: 'updateItem', list: 'alcohol', id, fields: { lesson: LESSONS.extra } });
-  assert.equal(s.lists.alcohol[0].lesson, 'היה יותר מדי');
+  assert(s.notes.meat.includes('מנגל אחד לא הספיק'));
+  s = applyOp(s, { type: 'setNotes', section: 'gear', text: '  רמקול!\nמשחקים לילדים  ' });
+  assert.equal(s.notes.gear, 'רמקול!\nמשחקים לילדים');
+  s = applyOp(s, { type: 'updatePerson', id: 'dani', fields: { phone: '050-1234567' } });
+  assert.equal(s.people[0].phone, '050-1234567');
 });
 
 test('removing a family clears everything assigned to it but refuses if they paid', () => {
@@ -113,7 +116,8 @@ test('odd amounts still add up exactly', () => {
 test('a new weekend keeps families, lists and lessons, resets the rest', () => {
   let s = weekend();
   const item = s.lists.meat[0].id;
-  s = applyOp(s, { type: 'updateItem', list: 'meat', id: item, fields: { done: true, who: 'dani', lesson: 'היה חסר' } });
+  s = applyOp(s, { type: 'updateItem', list: 'meat', id: item, fields: { done: true, who: 'dani' } });
+  s = applyOp(s, { type: 'setNotes', section: 'meat', text: 'היה חסר' });
   s = applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'yes' } });
   s = applyOp(s, { type: 'setBuyer', list: 'meat', person: 'dani' });
   s = pay(s, 'e1', 'dani', 12345, 'meat');
@@ -122,7 +126,7 @@ test('a new weekend keeps families, lists and lessons, resets the rest', () => {
   assert.equal(s.people.length, 3);
   assert.equal(s.lists.meat[0].done, false);
   assert.equal(s.lists.meat[0].who, null);
-  assert.equal(s.lists.meat[0].lesson, 'היה חסר');
+  assert.equal(s.notes.meat, 'היה חסר');
   assert.equal(s.people[0].coming, null);
   assert.equal(s.buyers.meat, null);
   assert.equal(s.expenses.length, 0);

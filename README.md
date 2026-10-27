@@ -39,7 +39,7 @@ Set `SYNC_ENABLED=true` and `EDIT_CODE_SHA256` (SHA-256 of the group code, at le
 environment; keep the code itself out of Git.
 
 Production and each preview deploy get separate Blobs stores; `?test=1` uses a separate test store. The weekend is
-saved under `weekend-v4`; the earlier list under `current` is left untouched, and every previous version is kept under
+saved under `weekend-v5`; the earlier list under `current` is left untouched, and every previous version is kept under
 `history/`.
 
 Pushes to `main` publish the live site. On Netlify's credit-based Free plan each production deploy uses credits, so

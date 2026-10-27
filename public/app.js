@@ -1,12 +1,10 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, GEAR_GROUPS, WEIGHTS, COMING, LESSONS, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
-import { PERSONAL, TIPS } from './template.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, WEIGHTS, COMING, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
 const CODE_KEY = 'zayanim-code' + (TEST ? '-test' : '');
 const TAB_KEY = 'zayanim-tab';
 const SHOP_KEY = 'zayanim-shop';
-const PACKED_KEY = 'zayanim-packed';
 const POLL_MS = 20_000;
 
 const icon = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
@@ -36,7 +34,6 @@ let sending = false;
 let offline = false;
 let tab = TABS.some(t => t.id === local.get(TAB_KEY)) ? local.get(TAB_KEY) : 'home';
 let shopList = LISTS.includes(local.get(SHOP_KEY)) ? local.get(SHOP_KEY) : 'meat';
-let lessonMode = false; // after the weekend: mark what was missing or too much
 
 // ---------- server ----------
 
@@ -259,6 +256,8 @@ function groupSummary() {
   const open = state.people.filter(p => p.coming === null).length;
   return `${familiesComing(yes)}${open ? ` · ${open} עוד לא ענו` : ''}`;
 }
+// 050-1234567 -> 972501234567 for wa.me links.
+const waNumber = ph => { const d = ph.replace(/\D/g, ''); return d.startsWith('0') ? '972' + d.slice(1) : d; };
 const familiesComing = n => n === 1 ? 'משפחה אחת מגיעה' : `${n} משפחות מגיעות`;
 
 let toastTimer;
@@ -280,10 +279,6 @@ function updateSync() {
   if (offline) el.textContent = 'אין חיבור - השינויים יישמרו כשהחיבור יחזור';
   else if (sending || queue.length) el.textContent = 'שומר…';
   else el.textContent = 'הכל שמור · מתעדכן אצל כולם';
-}
-
-function packed() {
-  try { return new Set(JSON.parse(local.get(PACKED_KEY + ':' + state.event.id) || '[]')); } catch { return new Set(); }
 }
 
 // ---------- render ----------
@@ -328,7 +323,7 @@ function noPeopleHint() {
 }
 
 // The weekend's steps, the way the group runs it: place, who's coming, the four jobs,
-// extra gear, settling up, and what to learn for next time.
+// extra gear, settling up.
 function homeView() {
   const e = state.event;
   const yes = coming(state).length;
@@ -338,8 +333,6 @@ function homeView() {
   const sum = total(state);
   const { transfers } = settle(state);
   const openPay = transfers.filter(t => !state.paid.includes(t.key)).length;
-  const items = LISTS.flatMap(k => state.lists[k]);
-  const lessons = items.filter(i => i.lesson).length;
   const step = (n, done, title, body, action = '') => `
     <section class="card stepcard ${done ? 'done' : ''}">
       <div class="step-n">${done ? '✓' : n}</div>
@@ -359,17 +352,13 @@ function homeView() {
     `<div class="roles">${LISTS.map((k, i) => `
       <label class="role"><span><i>${i + 1}</i>${esc(LIST_LABELS[k])}</span>
         <select data-act="buyer" data-list="${k}" class="${state.buyers[k] ? '' : 'unset'}">${options(state.buyers[k], 'מי לוקח?')}</select></label>`).join('')}</div>`)}
-  ${step(4, !gearOpen, 'ציוד נוסף',
+  ${step(4, !gearOpen, 'ציוד שחוזר כל פעם',
     `<p>${gearOpen ? `ל-<b>${gearOpen}</b> פריטים מתוך ${state.gear.length} אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</p>`,
     `<button class="btn sm" data-act="goTab" data-tab="gear">חלוקת ציוד</button>`)}
   ${step(5, sum && !openPay, 'מתחשבנים',
     `<p>${sum ? `שולמו <b>${shekels(sum)}</b> · ${openPay ? `${openPay} העברות פתוחות` : 'הכל סגור'}` : 'בסוף כל אחד כותב כמה שילם'}</p>`,
     `<button class="btn sm" data-act="goTab" data-tab="money">${sum ? 'להתחשבנות' : 'הוספת קבלה'}</button>`)}
-  ${step(6, false, 'לומדים לפעם הבאה',
-    `<p>${lessons ? `<b>${lessons}</b> פריטים מסומנים עם לקח` : 'אחרי הסופ״ש: מסמנים מה היה חסר ומה היה יותר מדי'}</p>
-     <details class="tips"><summary>מהפעם הקודמת</summary><ul>${TIPS.map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>
-     ${e.notes ? `<p class="small"><b>הערות:</b> ${esc(e.notes)}</p>` : ''}`,
-    `<button class="btn sm" data-act="lessons">סימון חסר / מיותר</button>`)}`;
+`;
 }
 
 function shopView() {
@@ -401,8 +390,6 @@ function shopView() {
   </section>
   <section class="card">
     <h2>מה קונים <span class="tally">${done} מתוך ${items.length}</span></h2>
-    <button class="btn sm lesson-toggle ${lessonMode ? 'on' : ''}" data-act="lessonMode">${lessonMode ? '✓ מסמנים לקחים - סיום' : 'אחרי הסופ״ש: מה היה חסר / מיותר?'}</button>
-    ${lessonMode ? `<p class="small muted">לכל פריט: היה חסר, היה יותר מדי, או בדיוק. זה יופיע ליד הפריט בסופ״ש הבא.</p>` : ''}
     <form class="quick" data-form="addItem" data-list="${k}">
       <input type="text" id="q-name-${k}" data-keep name="name" placeholder="מה עוד צריך?" maxlength="120" required autocomplete="off">
       <input type="text" id="q-qty-${k}" data-keep name="qty" placeholder="כמה" maxlength="60" autocomplete="off">
@@ -413,46 +400,43 @@ function shopView() {
         <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
         <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}
           <span class="sub">${esc([it.qty, it.who && 'מביאים: ' + personName(it.who), it.note].filter(Boolean).join(' · '))}</span>
-          ${it.lesson && !lessonMode ? `<span class="lesson">בפעם שעברה: ${esc(it.lesson)}</span>` : ''}</button>
-          ${lessonMode ? `<div class="lesson-pills">${Object.entries(LESSONS).map(([v, label]) =>
-            `<button class="pill ${it.lesson === label ? 'on' : ''}" data-act="lesson" data-list="${k}" data-id="${it.id}" data-v="${v}">${label}</button>`).join('')}</div>` : ''}</div>
+</button></div>
         <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
       </li>`).join('')}</ul>` : '<div class="empty">ריק פה. מה צריך?</div>'}
     ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:14px">העתקת מה שחסר לוואטסאפ</button>` : ''}
+  </section>
+  ${notesBlock(k)}`;
+}
+
+// Free-text notes from earlier weekends, one point per line.
+function notesBlock(section) {
+  const lines = state.notes[section].split('\n').map(l => l.trim()).filter(Boolean);
+  return `<section class="card notes">
+    <h2>מהפעמים הקודמות</h2>
+    ${lines.length ? `<ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '<p class="muted small">עוד אין הערות. מה היה חסר? מה היה מיותר?</p>'}
+    <button class="btn sm" data-act="editNotes" data-section="${section}">${lines.length ? 'עריכת הערות' : 'הוספת הערות'}</button>
   </section>`;
 }
 
 function gearView() {
   const missing = state.gear.filter(g => !g.who).length;
-  const mine = packed();
   return `
   ${noPeopleHint()}
-  <p class="open-note">${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</p>
-  ${Object.entries(GEAR_GROUPS).map(([group, label]) => {
-    const items = state.gear.filter(g => g.group === group);
-    return `<section class="card">
-      <h2>${esc(label)} <small>${items.filter(g => g.who).length} מתוך ${items.length}</small></h2>
-      ${items.length ? `<ul class="rows">${items.map(g => `
-        <li class="row ${g.done ? 'done' : ''}">
-          <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="נארז">
-          <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}${g.note ? `<span class="lesson">${esc(g.note)}</span>` : ''}</button></div>
-          <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
-          <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
-        </li>`).join('')}</ul>` : ''}
-      <form class="quick" data-form="addGear" data-group="${group}" style="grid-template-columns:1fr 46px">
-        <input type="text" id="q-gear-${group}" data-keep name="name" placeholder="עוד משהו…" maxlength="120" required autocomplete="off">
-        <button class="btn" aria-label="הוספה">+</button>
-      </form>
-    </section>`;
-  }).join('')}
   <section class="card">
-    <h2>כל משפחה לעצמה <small>הסימונים רק אצלך</small></h2>
-    <ul class="rows">${PERSONAL.map((p, i) => `
-      <li class="row ${mine.has(i) ? 'done' : ''}">
-        <input type="checkbox" class="check" data-act="packed" data-i="${i}" ${mine.has(i) ? 'checked' : ''} aria-label="ארזתי">
-        <div class="grow"><span class="title">${esc(p)}</span></div>
-      </li>`).join('')}</ul>
-  </section>`;
+    <h2>ציוד שחוזר כל פעם <small>${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</small></h2>
+    ${state.gear.length ? `<ul class="rows">${state.gear.map(g => `
+      <li class="row ${g.done ? 'done' : ''}">
+        <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="ארוז">
+        <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
+        <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
+        <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
+      </li>`).join('')}</ul>` : '<div class="empty">אין ציוד ברשימה</div>'}
+    <form class="quick" data-form="addGear" style="grid-template-columns:1fr 46px">
+      <input type="text" id="q-gear" data-keep name="name" placeholder="עוד משהו להביא…" maxlength="120" required autocomplete="off">
+      <button class="btn" aria-label="הוספה">+</button>
+    </form>
+  </section>
+  ${notesBlock('gear')}`;
 }
 
 function moneyView() {
@@ -523,6 +507,7 @@ function peopleView() {
       <div class="person ${p.coming === 'no' ? 'not-coming' : ''}">
         <div class="person-head">
           <button class="title" data-act="editPerson" data-id="${p.id}">${esc(p.name)}</button>
+          ${p.phone ? `<a class="contact" href="tel:${esc(p.phone.replace(/[ -]/g, ''))}" aria-label="התקשרות">☎</a><a class="contact" href="https://wa.me/${esc(waNumber(p.phone))}" target="_blank" rel="noopener" aria-label="וואטסאפ">✉</a>` : `<button class="pill" data-act="editPerson" data-id="${p.id}">+ טלפון</button>`}
           <button class="x" data-act="removePerson" data-id="${p.id}" aria-label="מחיקה">×</button>
         </div>
         <div class="rsvp">${Object.entries(COMING).map(([v, label]) =>
@@ -563,11 +548,10 @@ function itemDialog(k, it) {
     <label>כמות</label><input type="text" name="qty" value="${esc(it.qty)}" maxlength="60">
     <label>מי מביא (אם לא הקונה)</label><select name="who">${options(it.who, 'הקונה של הרשימה')}</select>
     <label>הערה</label><input type="text" name="note" value="${esc(it.note)}" maxlength="300" placeholder="מותג, איפה קונים, לקנות ביום…">
-    <label>לקח לפעם הבאה</label><input type="text" name="lesson" value="${esc(it.lesson)}" maxlength="300" placeholder="נשאר הרבה / היה חסר…">
     <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}${deleteBtn}</div>`,
   (d, action) => {
     if (action === 'delete') send({ type: 'removeItem', list: k, id: it.id });
-    else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), who: d.who || null, note: d.note.trim(), lesson: d.lesson.trim() } });
+    else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), who: d.who || null, note: d.note.trim() } });
   });
 }
 
@@ -682,11 +666,11 @@ $('view').addEventListener('submit', e => {
   if (!name) return;
   let ok = false;
   if (f.dataset.form === 'addItem') ok = send({ type: 'addItem', list: f.dataset.list, id: newId(), name, qty: d.qty });
-  if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', group: f.dataset.group, id: newId(), name, who: null });
+  if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', id: newId(), name, who: null });
   if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, adults: Number(d.adults), weight: 1 });
   if (ok) {
     // send() already redrew the page, so clear the new copy of the form.
-    const sel = `form[data-form="${f.dataset.form}"]` + ['list', 'group'].map(k => f.dataset[k] ? `[data-${k}="${f.dataset[k]}"]` : '').join('');
+    const sel = `form[data-form="${f.dataset.form}"]` + ['list'].map(k => f.dataset[k] ? `[data-${k}="${f.dataset[k]}"]` : '').join('');
     const fresh = $('view').querySelector(sel);
     fresh?.querySelectorAll('input').forEach(i => { i.value = ''; });
     fresh?.querySelector('input')?.focus();
@@ -702,13 +686,6 @@ $('view').addEventListener('change', e => {
   if (act === 'toggleGear') send({ type: 'updateGear', id, fields: { done: el.checked } });
   if (act === 'gearWho') send({ type: 'updateGear', id, fields: { who } });
   if (act === 'paid') send({ type: 'setPaid', key: el.dataset.key, paid: el.checked });
-  if (act === 'packed') {
-    const mine = packed();
-    const i = Number(el.dataset.i);
-    if (el.checked) mine.add(i); else mine.delete(i);
-    local.set(PACKED_KEY + ':' + state.event.id, JSON.stringify([...mine]));
-    render();
-  }
 });
 
 $('view').addEventListener('click', e => {
@@ -720,16 +697,13 @@ $('view').addEventListener('click', e => {
     case 'goPeople': return goTab('people');
     case 'goTab': return goTab(el.dataset.tab);
     case 'editEvent': return eventDialog();
-    case 'lessons':
-      lessonMode = true;
-      return goTab('shop');
-    case 'lessonMode':
-      lessonMode = !lessonMode;
-      return render();
-    case 'lesson': {
-      const it = state.lists[list].find(i => i.id === id);
-      const value = LESSONS[el.dataset.v];
-      return send({ type: 'updateItem', list, id, fields: { lesson: it.lesson === value ? '' : value } });
+    case 'editNotes': {
+      const section = el.dataset.section;
+      return openDialog(`<h3>הערות מהפעמים הקודמות</h3>
+        <p class="small muted">שורה לכל הערה: מה היה חסר, מה היה מיותר, מה לזכור.</p>
+        <textarea name="text" rows="9" maxlength="3000">${esc(state.notes[section])}</textarea>
+        <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
+      d => send({ type: 'setNotes', section, text: d.text }));
     }
     case 'coming': {
       const v = el.dataset.v || null;
@@ -750,9 +724,8 @@ $('view').addEventListener('click', e => {
     case 'editGear': {
       const g = state.gear.find(x => x.id === id);
       return openDialog(`<h3>עריכת ציוד</h3><label>מה</label><input type="text" name="name" value="${esc(g.name)}" maxlength="120" required>
-        <label>הערה</label><input type="text" name="note" value="${esc(g.note)}" maxlength="300">
         <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}${deleteBtn}</div>`,
-      (f, action) => action === 'delete' ? send({ type: 'removeGear', id }) : send({ type: 'updateGear', id, fields: { name: f.name.trim(), note: f.note.trim() } }));
+      (f, action) => action === 'delete' ? send({ type: 'removeGear', id }) : send({ type: 'updateGear', id, fields: { name: f.name.trim() } }));
     }
     case 'removeGear': return send({ type: 'removeGear', id });
     case 'addExpense':
@@ -771,9 +744,11 @@ $('view').addEventListener('click', e => {
         (lines.length ? `העברות:\n${lines.join('\n')}` : 'הכל סגור 🎉'));
     }
     case 'editPerson':
-      return openDialog(`<h3>עריכת שם</h3><input type="text" name="name" value="${esc(p.name)}" maxlength="80" required>
+      return openDialog(`<h3>${esc(p.name)}</h3>
+        <label>שם</label><input type="text" name="name" value="${esc(p.name)}" maxlength="80" required>
+        <label>טלפון</label><input type="tel" name="phone" value="${esc(p.phone)}" maxlength="20" placeholder="050-0000000" inputmode="tel" pattern="\\+?[0-9 \\-]{7,20}">
         <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
-      d => send({ type: 'updatePerson', id, fields: { name: d.name.trim() } }));
+      d => send({ type: 'updatePerson', id, fields: { name: d.name.trim(), phone: d.phone.trim() } }));
     case 'step': {
       const field = el.dataset.field;
       const fields = { [field]: p[field] + Number(el.dataset.d) };
