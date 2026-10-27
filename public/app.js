@@ -6,13 +6,16 @@ const CODE_KEY = 'zayanim-code' + (TEST ? '-test' : '');
 const TAB_KEY = 'zayanim-tab';
 const POLL_MS = 20_000;
 
+const icon = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 const TABS = [
-  { id: 'meat', icon: '🥩', label: 'בשר' },
-  { id: 'alcohol', icon: '🍷', label: 'אלכוהול' },
-  { id: 'general', icon: '🛒', label: 'כללי' },
-  { id: 'gear', icon: '🎒', label: 'ציוד' },
-  { id: 'money', icon: '💸', label: 'התחשבנות' },
+  { id: 'meat', label: 'מנגל', icon: icon('<path d="M12 3c1.2 3 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-2.1 1-3.4 2.2-4.4 0 2 .9 3.1 2.1 3.3-.4-3 .1-5.2.2-7.5z"/><path d="M5 21h14M8 18l-1.5 3M16 18l1.5 3"/>') },
+  { id: 'alcohol', label: 'אלכוהול', icon: icon('<path d="M7.5 3h9l-.8 6.5a3.7 3.7 0 0 1-7.4 0z"/><path d="M8 7h8M12 13.2V20M8.5 20.5h7"/>') },
+  { id: 'general', label: 'כללי', icon: icon('<path d="M3 9.5h18l-2 10.5H5z"/><path d="M8 9.5 11 4M16 9.5 13 4M9 13.5v3M15 13.5v3M12 13.5v3"/>') },
+  { id: 'gear', label: 'ציוד', icon: icon('<path d="M12 4 2.5 20h19z"/><path d="M12 4v16M8.5 20 12 13.5 15.5 20"/>') },
+  { id: 'money', label: 'חשבון', icon: icon('<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 11.5h6M9 15h3"/>') },
 ];
+// "Hi, I'm buying ___" on each list's name tag.
+const BUY_LABELS = { meat: 'את הבשר', alcohol: 'את האלכוהול', general: 'את האוכל הכללי' };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -159,11 +162,11 @@ const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
 function groupSummary() {
   const couples = state.people.filter(p => p.size === 2).length;
   const singles = state.people.length - couples;
-  if (!state.people.length) return '👫 הוסיפו את החברים';
+  if (!state.people.length) return '+ הוסיפו את החברים';
   const parts = [];
   if (couples) parts.push(couples === 1 ? 'זוג אחד' : `${couples} זוגות`);
   if (singles) parts.push(singles === 1 ? 'יחיד אחד' : `${singles} יחידים`);
-  return `👫 ${parts.join(' + ')} · ${headcount(state)} אנשים`;
+  return `${parts.join(' + ')} · ${headcount(state)} אנשים`;
 }
 
 let toastTimer;
@@ -182,9 +185,9 @@ async function copyText(text, done = 'הועתק - אפשר להדביק בוו�
 
 function updateSync() {
   const el = $('sync');
-  if (offline) el.textContent = '⚠️ אין חיבור - השינויים יישמרו כשהחיבור יחזור';
+  if (offline) el.textContent = 'אין חיבור - השינויים יישמרו כשהחיבור יחזור';
   else if (sending || queue.length) el.textContent = 'שומר…';
-  else el.textContent = '✓ הכל שמור · מתעדכן אוטומטית אצל כולם';
+  else el.textContent = 'הכל שמור · מתעדכן אצל כולם';
 }
 
 // ---------- render ----------
@@ -206,13 +209,13 @@ function render() {
   const focused = active?.id;
 
   $('evTitle').textContent = state.event.title;
-  $('evMeta').textContent = [fmtDate(state.event.date), state.event.place].filter(Boolean).join(' · ') || 'תאריך ומקום - מהתפריט ☰';
+  $('evMeta').textContent = [fmtDate(state.event.date), state.event.place].filter(Boolean).join(' · ') || 'תאריך ומקום? בתפריט';
   $('peopleChip').textContent = groupSummary();
-  $('moneyChip').textContent = '💸 ' + shekels(total(state));
+  $('moneyChip').textContent = 'בקופה: ' + shekels(total(state));
   document.title = state.event.title;
 
   $('tabs').innerHTML = TABS.map(t =>
-    `<button data-tab="${t.id}" class="${tab === t.id ? 'on' : ''}"><b>${t.icon}</b>${t.label}</button>`).join('');
+    `<button data-tab="${t.id}" class="${tab === t.id ? 'on' : ''}">${t.icon}${t.label}</button>`).join('');
 
   $('view').innerHTML = LISTS.includes(tab) ? listView(tab)
     : tab === 'gear' ? gearView()
@@ -226,7 +229,7 @@ function render() {
 
 function noPeopleHint() {
   return state.people.length ? '' :
-    `<section class="card"><b>קודם כל - מי מגיע?</b><p class="muted small">הוסיפו את הזוגות, ואז אפשר לבחור מי קונה מה ולהתחשבן בסוף.</p><button class="btn primary" data-act="goPeople">הוספת החברים</button></section>`;
+    `<section class="card"><h2>קודם כל, מי מגיע?</h2><p class="muted small">מוסיפים את הזוגות, ואז בוחרים מי קונה מה ומתחשבנים בסוף.</p><button class="btn fire" data-act="goPeople">הוספת החברים</button></section>`;
 }
 
 function listView(k) {
@@ -238,30 +241,31 @@ function listView(k) {
   const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
   return `
   ${noPeopleHint()}
-  <section class="card buyer">
-    <label for="buyer-${k}">🛍️ מי קונה ${esc(LIST_LABELS[k])}?</label>
-    <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}">${options(buyer, 'עוד לא נקבע - בחרו')}</select>
-    <div class="spent">
-      <span>שולם עד עכשיו: <strong>${shekels(spent)}</strong></span>
-      <button class="btn accent sm" data-act="addExpense" data-cat="${k}">+ הוספת קבלה</button>
+  <section class="nametag">
+    <div class="nametag-top"><span>היי, אני קונה</span><b>${esc(BUY_LABELS[k])}</b></div>
+    <div class="nametag-body">
+      <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}" aria-label="מי קונה ${esc(LIST_LABELS[k])}">${options(buyer, 'מי? בחרו שם')}</select>
+      <div class="spent">
+        <span>שולם עד עכשיו <strong class="num">${shekels(spent)}</strong></span>
+        <button class="btn fire sm" data-act="addExpense" data-cat="${k}">+ קבלה</button>
+      </div>
+      ${exp.length ? `<div class="receipts-mini">${exp.map(x => `<div>${esc(x.what)} · <span class="num">${shekels(x.amount)}</span> · ${esc(personName(x.payer))}</div>`).join('')}</div>` : ''}
     </div>
-    ${exp.map(x => `<div class="small">🧾 ${esc(x.what)} · ${shekels(x.amount)} · שילם/ה: ${esc(personName(x.payer))}</div>`).join('')}
   </section>
   <section class="card">
-    <h2>רשימת קניות <small>${done} מתוך ${items.length} נקנו</small></h2>
-    <div class="bar"><i style="width:${items.length ? done / items.length * 100 : 0}%"></i></div>
+    <h2>מה קונים <span class="tally">${done} מתוך ${items.length}</span></h2>
     <form class="quick" data-form="addItem" data-list="${k}">
       <input type="text" id="q-name-${k}" data-keep name="name" placeholder="מה עוד צריך?" maxlength="120" required autocomplete="off">
-      <input type="text" id="q-qty-${k}" data-keep name="qty" placeholder="כמות" maxlength="60" autocomplete="off">
-      <button class="btn primary" aria-label="הוספה">+</button>
+      <input type="text" id="q-qty-${k}" data-keep name="qty" placeholder="כמה" maxlength="60" autocomplete="off">
+      <button class="btn" aria-label="הוספה">+</button>
     </form>
     ${items.length ? `<ul class="rows">${sorted.map(it => `
       <li class="row ${it.done ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
         <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}<span class="sub">${esc([it.qty, it.note].filter(Boolean).join(' · '))}</span></button></div>
         <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
-      </li>`).join('')}</ul>` : '<div class="empty">הרשימה ריקה. הוסיפו פריט למעלה.</div>'}
-    ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:12px">📋 העתקת מה שחסר לוואטסאפ</button>` : ''}
+      </li>`).join('')}</ul>` : '<div class="empty">ריק פה. מה צריך?</div>'}
+    ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:14px">העתקת מה שחסר לוואטסאפ</button>` : ''}
   </section>`;
 }
 
@@ -294,38 +298,35 @@ function moneyView() {
   const skips = LISTS.map(k => [k, state.people.filter(p => p.skip.includes(k))]).filter(([, ps]) => ps.length);
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
   return `
-  <section class="card">
-    <div class="stats">
-      <div class="stat"><strong>${shekels(sum)}</strong><span>סה״כ הוצאות</span></div>
-      <div class="stat"><strong>${hc ? shekels(Math.round(sum / hc)) : '—'}</strong><span>${skips.length ? 'ממוצע לאדם' : 'לאדם'}</span></div>
-      <div class="stat"><strong>${hc ? shekels(Math.round(sum * 2 / hc)) : '—'}</strong><span>${skips.length ? 'ממוצע לזוג' : 'לזוג'}</span></div>
-    </div>
-    ${skips.length ? `<p class="small muted" style="margin:10px 0 0">${skips.map(([k, ps]) => `לא משתתפים ב${esc(LIST_LABELS[k])}: ${ps.map(p => esc(p.name)).join(', ')}`).join('<br>')}</p>` : ''}
-  </section>
-
-  <section class="card">
-    <h2>מי שילם על מה <small>${state.expenses.length} קבלות</small></h2>
-    ${state.expenses.length ? `<ul class="rows">${state.expenses.map(x => `
-      <li class="row">
-        <div class="grow"><button class="title" data-act="editExpense" data-id="${x.id}">${esc(x.what)}<span class="tag">${esc(CATEGORY_LABELS[x.cat])}</span><span class="sub">שילם/ה: ${esc(personName(x.payer))}</span></button></div>
+  <section class="receipt">
+    <div class="r-head"><b>חשבון סופי</b><span>${esc(state.event.title)}</span></div>
+    ${state.expenses.length ? state.expenses.map(x => `
+      <div class="r-line">
+        <button class="what" data-act="editExpense" data-id="${x.id}"><b>${esc(x.what)}</b><span>${esc(CATEGORY_LABELS[x.cat])} · שילמו ${esc(personName(x.payer))}</span></button>
         <span class="amount">${shekels(x.amount)}</span>
         <button class="x" data-act="removeExpense" data-id="${x.id}" aria-label="מחיקה">×</button>
-      </li>`).join('')}</ul>` : '<div class="empty">עוד אין הוצאות. מי שקנה - מוסיף כאן את הסכום מהקבלה.</div>'}
-    <button class="btn accent block" data-act="addExpense" data-cat="" style="margin-top:12px">+ הוספת הוצאה</button>
+      </div>`).join('') : '<div class="empty">עוד אין קבלות</div>'}
+    <div class="r-total"><span>סה״כ</span><b>${shekels(sum)}</b></div>
+    <div class="r-split">
+      <div><b>${hc ? shekels(Math.round(sum / hc)) : '—'}</b><span>${skips.length ? 'ממוצע לאדם' : 'לאדם'}</span></div>
+      <div><b>${hc ? shekels(Math.round(sum * 2 / hc)) : '—'}</b><span>${skips.length ? 'ממוצע לזוג' : 'לזוג'}</span></div>
+    </div>
+    ${skips.length ? `<p class="r-note">${skips.map(([k, ps]) => `בלי ${esc(LIST_LABELS[k])}: ${ps.map(p => esc(p.name)).join(', ')}`).join('<br>')}</p>` : ''}
+    <button class="btn fire block" data-act="addExpense" data-cat="">+ הוספת קבלה</button>
   </section>
 
   ${sum ? `
   <section class="card">
-    <h2>העברות לסגירת החשבון <small>${open ? `${open} פתוחות` : 'הכל סגור 🎉'}</small></h2>
+    <h2>מי מעביר למי <small>${open ? `${open} פתוחות` : 'הכל סגור'}</small></h2>
     ${transfers.length ? transfers.map(t => {
       const paid = state.paid.includes(t.key);
-      return `<div class="transfer ${paid ? 'done' : ''}">
+      return `<div class="ticket ${paid ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="paid" data-key="${esc(t.key)}" ${paid ? 'checked' : ''} aria-label="הועבר">
-        <div class="grow"><b>${esc(personName(t.from))}</b> מעבירים ל<b>${esc(personName(t.to))}</b></div>
+        <div class="grow"><b>${esc(personName(t.from))}</b> ← <b>${esc(personName(t.to))}</b></div>
         <span class="amount">${shekels(t.amount)}</span>
       </div>`;
-    }).join('') : '<div class="empty">כולם שילמו בדיוק את החלק שלהם.</div>'}
-    <button class="btn block" data-act="copySettle" style="margin-top:12px">📋 העתקת ההתחשבנות לוואטסאפ</button>
+    }).join('') : '<div class="empty">כולם שילמו בדיוק את החלק שלהם</div>'}
+    <button class="btn block" data-act="copySettle" style="margin-top:6px">העתקה לוואטסאפ</button>
   </section>
 
   <section class="card">
@@ -342,7 +343,7 @@ function moneyView() {
 function peopleView() {
   return `
   <section class="card">
-    <h2>מי מגיע <small>${esc(groupSummary().replace('👫 ', ''))}</small></h2>
+    <h2>מי מגיע <small>${esc(groupSummary())}</small></h2>
     <form class="quick" data-form="addPerson" style="grid-template-columns:1fr 96px 44px">
       <input type="text" id="q-person" data-keep name="name" placeholder="למשל: דני ומיכל" maxlength="80" required autocomplete="off">
       <select name="size" aria-label="זוג או יחיד"><option value="2">זוג</option><option value="1">יחיד</option></select>
@@ -353,7 +354,7 @@ function peopleView() {
       <div class="person">
         <div class="person-head">
           <button class="title" data-act="editPerson" data-id="${p.id}">${esc(p.name)}</button>
-          <button class="pill" data-act="toggleSize" data-id="${p.id}">${p.size === 2 ? '👫 זוג' : '🧍 יחיד'}</button>
+          <button class="pill" data-act="toggleSize" data-id="${p.id}">${p.size === 2 ? 'זוג' : 'יחיד'}</button>
           <button class="x" data-act="removePerson" data-id="${p.id}" aria-label="מחיקה">×</button>
         </div>
         <div class="toggles">משתתפים ב:
@@ -423,13 +424,13 @@ function newEventDialog() {
   const { transfers } = settle(state);
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
   openDialog(`<h3>סיום וסופ״ש חדש</h3>
-    ${open ? `<p style="color:var(--bad)">⚠️ יש עוד ${open} העברות שלא סומנו כשולמו.</p>` : ''}
+    ${open ? `<p style="color:var(--red)">שימו לב: יש עוד ${open} העברות שלא סומנו כשולמו.</p>` : ''}
     <p class="small muted">הסופ״ש הנוכחי יישמר בהיסטוריה עם סכום ההוצאות. החברים, הרשימות והציוד נשארים; הסימונים, הקונים וההוצאות מתאפסים.</p>
     <label>שם הסופ״ש החדש</label><input type="text" name="title" value="${esc(state.event.title)}" maxlength="120" required>
     <label>תאריך</label><input type="date" name="date">
     <label>מקום</label><input type="text" name="place" maxlength="120">
     <div class="actions"><button class="btn primary">פתיחת סופ״ש חדש</button>${cancelBtn}</div>`,
-  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'meat'; render(); toast('סופ״ש חדש נפתח 🏕️'); } });
+  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'meat'; render(); toast('סופ״ש חדש נפתח'); } });
 }
 
 function pastDialog() {
@@ -443,12 +444,12 @@ function pastDialog() {
 function menuDialog() {
   openDialog(`<h3>תפריט</h3>
     <div class="menu-list">
-      <button class="btn" value="event">📅 פרטי הסופ״ש - שם, תאריך, מקום</button>
-      <button class="btn" value="people">👫 מי מגיע</button>
-      <button class="btn" value="share">🔗 שליחת קישור לקבוצה</button>
-      <button class="btn" value="new">🏁 סיום וסופ״ש חדש</button>
-      <button class="btn" value="past">🗂️ סופ״שים קודמים</button>
-      <button class="btn" value="logout">🚪 יציאה מהמכשיר הזה</button>
+      <button class="btn" value="event">פרטי הסופ״ש: שם, תאריך, מקום</button>
+      <button class="btn" value="people">מי מגיע</button>
+      <button class="btn" value="share">שליחת קישור לקבוצה</button>
+      <button class="btn" value="new">סיום וסופ״ש חדש</button>
+      <button class="btn" value="past">סופ״שים קודמים</button>
+      <button class="btn" value="logout">יציאה מהמכשיר הזה</button>
     </div>
     <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`,
   (d, action) => {
