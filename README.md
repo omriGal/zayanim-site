@@ -35,7 +35,7 @@ and the server (`lib/api.mjs`, exposed by `netlify/functions/list.mjs` at `/api/
 ## Netlify
 
 Build command `node scripts/configure.mjs`, publish directory `public`, functions directory `netlify/functions`.
-Set `SYNC_ENABLED=true` and `EDIT_CODE_SHA256` (SHA-256 of the group code, at least 20 characters) in the Netlify
+Set `SYNC_ENABLED=true` and `EDIT_CODE_SHA256` (SHA-256 of the group code, at least 15 characters) in the Netlify
 environment; keep the code itself out of Git.
 
 Production and each preview deploy get separate Blobs stores; `?test=1` uses a separate test store. The weekend is
