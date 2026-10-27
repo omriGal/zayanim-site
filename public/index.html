@@ -266,7 +266,8 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
 .cameo { position: fixed; left: 12px; bottom: calc(82px + env(safe-area-inset-bottom)); z-index: 15; display: flex; align-items: flex-end; gap: 6px; max-width: calc(100% - 24px); transform: translateY(160%) rotate(-8deg); transition: transform .4s cubic-bezier(.2, 1.4, .4, 1); pointer-events: none; }
 .cameo.on { transform: none; pointer-events: auto; }
 .polaroid { background: #fff; padding: 5px 5px 18px; border: 2px solid var(--ink); box-shadow: var(--hard); transform: rotate(-4deg); flex: none; }
-.polaroid img { display: block; width: 96px; height: 116px; object-fit: cover; }
+/* Crop from near the top: in these photos the face is in the upper part. */
+.polaroid img { display: block; width: 96px; height: 116px; object-fit: cover; object-position: 50% 15%; }
 .bubble { position: relative; background: var(--sheet); border: 2px solid var(--ink); border-radius: 16px; padding: 8px 14px 10px; margin-bottom: 52px; font: 700 27px/1 var(--hand); box-shadow: 3px 3px 0 var(--ink); }
 .bubble::after { content: ''; position: absolute; left: -9px; bottom: 12px; width: 14px; height: 14px; background: var(--sheet); border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); }
 .splash { position: fixed; inset: 0; z-index: 30; background: #0b1611ee; display: grid; place-items: center; padding: 24px; opacity: 0; transition: opacity .3s; }
@@ -274,7 +275,8 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
 .splash figure { margin: 0; text-align: center; transform: scale(.9) rotate(-3deg); transition: transform .45s cubic-bezier(.2, 1.4, .4, 1); }
 .splash.on figure { transform: rotate(-2deg); }
 .splash .polaroid { display: inline-block; padding: 8px 8px 12px; transform: none; }
-.splash .polaroid img { width: min(62vw, 250px); height: auto; max-height: 52vh; }
+/* The whole photo, never cropped: scale it to fit both the width and the height. */
+.splash .polaroid img { width: auto; height: auto; max-width: min(62vw, 250px); max-height: 52vh; object-fit: contain; }
 .splash figcaption { margin-top: 16px; color: var(--ember); font: 700 clamp(34px, 10vw, 48px)/1 var(--hand); transform: rotate(2deg); }
 .gate-logo { width: 100%; max-width: 280px; border: 2px solid var(--ink); border-radius: 4px; display: block; margin: 0 auto; }
 
