@@ -1,13 +1,89 @@
-import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {createHash} from 'node:crypto';import {makeHandler,validState} from '../lib/list-api.mjs';
-const initial=JSON.parse(readFileSync(new URL('../public/initial-state.json',import.meta.url)));const code='TEST-ONLY-012345678901234567890123';const hash=createHash('sha256').update(code).digest('hex');
-class MemoryStore{map=new Map();count=0;async getWithMetadata(k){const x=this.map.get(k);return x?structuredClone(x):null;}async setJSON(k,data,o){const old=this.map.get(k);if(o.onlyIfNew&&old||o.onlyIfMatch&&old?.etag!==o.onlyIfMatch)return {modified:false};const etag='e'+ ++this.count;this.map.set(k,{data:structuredClone(data),etag});return {modified:true,etag};}}
-function harness(){const prod=new MemoryStore(),testStore=new MemoryStore();const env={SYNC_ENABLED:'true',EDIT_CODE_SHA256:hash};const h=makeHandler({storeFor:t=>t?testStore:prod,env});const call=(method='GET',body,headers={},suffix='')=>h(new Request('https://example.test/api/list'+suffix,{method,headers:{...(method==='POST'?{'Content-Type':'application/json','Origin':'https://example.test'}:{}),...headers},...(body!==undefined?{body:JSON.stringify(body)}:{})}));return{prod,testStore,env,call};}
-test('baseline valid; invalid schema, duplicates, prototype extras rejected',()=>{assert(validState(initial));for(const mutate of [x=>x.adults=-1,x=>x.children=999,x=>x.data.breakfast.items[1].id=x.data.breakfast.items[0].id,x=>x.extra='x',x=>x.data.breakfast.items[0].done='true']){const x=structuredClone(initial);mutate(x);assert(!validState(x));}});
-test('disabled backend fails closed',async()=>{const x=harness();x.env.SYNC_ENABLED='false';assert.equal((await x.call()).status,503);});
-test('public GET has no secrets, initial store empty',async()=>{const x=harness(),r=await x.call();assert.equal(r.status,200);assert.deepEqual(await r.json(),{state:null,revision:null});assert.equal(r.headers.get('Cache-Control'),'no-store');});
-test('unauthorized writes denied; valid writes/read/history',async()=>{const x=harness();assert.equal((await x.call('POST',{state:initial,revision:null})).status,401);const r=await x.call('POST',{state:initial,revision:null},{'X-Edit-Code':code});assert.equal(r.status,200);const {revision}=await r.json();assert(revision);const got=await (await x.call()).json();assert.deepEqual(got.state,initial);const next=structuredClone(initial);next.adults=30;assert.equal((await x.call('POST',{state:next,revision},{'X-Edit-Code':code})).status,200);assert(x.prod.map.has('history/'+revision));});
-test('origin, content-type, malformed payload and wrong code rejected',async()=>{const x=harness(),body={state:initial,revision:null};assert.equal((await x.call('POST',body,{'X-Edit-Code':code,Origin:'https://evil.test'})).status,403);assert.equal((await x.call('POST',body,{'X-Edit-Code':code,'Content-Type':'text/plain'})).status,415);assert.equal((await x.call('POST',{state:{} ,revision:null},{'X-Edit-Code':code})).status,400);assert.equal((await x.call('POST',body,{'X-Edit-Code':'wrong'})).status,401);assert.equal((await x.call('POST',{state:initial,revision:null,extra:'x'},{'X-Edit-Code':code})).status,400);});
-test('oversize bodies rejected',async()=>{const x=harness();assert.equal((await x.call('POST',{big:'a'.repeat(200001)},{'X-Edit-Code':code})).status,413);});
-test('stale revisions rejected; concurrent initial writes have one winner',async()=>{const x=harness();const body={state:initial,revision:null},auth={'X-Edit-Code':code};const responses=await Promise.all([x.call('POST',body,auth),x.call('POST',body,auth)]);assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);assert.equal((await x.call('POST',body,auth)).status,409);});
-test('test namespace requires auth and cannot alter production',async()=>{const x=harness();assert.equal((await x.call('GET',undefined,{},'?test=1')).status,401);assert.equal((await x.call('POST',{state:initial,revision:null},{'X-Edit-Code':code},'?test=1')).status,200);assert.equal(x.prod.map.size,0);assert.equal(x.testStore.map.size,1);});
-test('read outages fail without leaking errors',async()=>{const h=makeHandler({env:{SYNC_ENABLED:'true'},storeFor:()=>({getWithMetadata:()=>{throw Error('private-token')}})});const r=await h(new Request('https://example.test/api/list'));assert.equal(r.status,503);assert(!(await r.text()).includes('private-token'));});
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { makeHandler } from '../lib/api.mjs';
+import { MemoryStore } from './memory-store.mjs';
+
+const code = 'TEST-ONLY-012345678901234567890123';
+const env = { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(code).digest('hex') };
+
+function harness() {
+  const prod = new MemoryStore(), testStore = new MemoryStore();
+  const handler = makeHandler({ storeFor: t => t ? testStore : prod, env });
+  const call = (method = 'GET', body, headers = {}, suffix = '') => handler(new Request('https://camp.test/api/list' + suffix, {
+    method,
+    headers: { 'X-Edit-Code': code, ...(method === 'POST' ? { 'Content-Type': 'application/json', Origin: 'https://camp.test' } : {}), ...headers },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  }));
+  return { prod, testStore, call };
+}
+
+test('reading and writing need the group code', async () => {
+  const { call } = harness();
+  assert.equal((await call('GET', undefined, { 'X-Edit-Code': 'wrong-code-wrong-code-wrong' })).status, 401);
+  assert.equal((await call('GET', undefined, { 'X-Edit-Code': '' })).status, 401);
+  assert.equal((await call('POST', { ops: [{ type: 'setEvent', fields: { title: 'x' } }] }, { 'X-Edit-Code': 'nope' })).status, 401);
+  assert.equal((await call('GET')).status, 200);
+});
+
+test('first read saves the template so every device sees the same ids', async () => {
+  const { call } = harness();
+  const a = await (await call()).json();
+  const b = await (await call()).json();
+  assert.equal(a.state.lists.meat[0].id, b.state.lists.meat[0].id);
+  assert.equal(a.revision, b.revision);
+});
+
+test('writes from another site are refused', async () => {
+  const { call } = harness();
+  const r = await call('POST', { ops: [{ type: 'setEvent', fields: { title: 'x' } }] }, { Origin: 'https://evil.test' });
+  assert.equal(r.status, 403);
+});
+
+test('two people editing at once both keep their changes', async () => {
+  const { call } = harness();
+  const { state } = await (await call()).json();
+  const [a, b] = await Promise.all([
+    call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'דני', size: 2 }] }),
+    call('POST', { ops: [{ type: 'updateItem', list: 'meat', id: state.lists.meat[0].id, fields: { done: true } }] }),
+  ]);
+  assert.equal(a.status, 200);
+  assert.equal(b.status, 200);
+  const after = (await (await call()).json()).state;
+  assert.equal(after.people[0].name, 'דני');
+  assert.equal(after.lists.meat[0].done, true);
+});
+
+test('an edit that no longer applies is reported with its position, nothing saved', async () => {
+  const { call } = harness();
+  const r = await call('POST', { ops: [
+    { type: 'addPerson', id: 'p1', name: 'דני', size: 2 },
+    { type: 'removeItem', list: 'meat', id: 'already-gone' },
+  ] });
+  assert.equal(r.status, 422);
+  const body = await r.json();
+  assert.equal(body.index, 1);
+  assert.equal(body.state.people.length, 0);
+  assert.equal((await (await call()).json()).state.people.length, 0);
+});
+
+test('the test namespace is separate from the real list', async () => {
+  const { call, prod } = harness();
+  await call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'טסט', size: 1 }] }, {}, '?test=1');
+  assert.equal(prod.map.size, 0);
+  assert.equal((await call('GET', undefined, {}, '?bad=1')).status, 400);
+});
+
+test('previous versions are kept', async () => {
+  const { call, prod } = harness();
+  await call();
+  await call('POST', { ops: [{ type: 'setEvent', fields: { title: 'קיץ' } }] });
+  assert([...prod.map.keys()].some(k => k.startsWith('history/')));
+});
+
+test('large or malformed bodies are refused', async () => {
+  const { call } = harness();
+  assert.equal((await call('POST', { ops: [] })).status, 400);
+  assert.equal((await call('POST', { ops: Array(51).fill({ type: 'setEvent', fields: {} }) })).status, 400);
+  assert.equal((await call('POST', { ops: [{ type: 'setEvent', fields: { title: 'x'.repeat(60000) } }] })).status, 413);
+});

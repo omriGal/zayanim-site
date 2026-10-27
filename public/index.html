@@ -1,22 +1,187 @@
 <!doctype html>
-<html lang="he" dir="rtl"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>רשימת קניות צימרים</title>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f4d3a">
+<title>סופ״ש צימרים</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏕️</text></svg>">
 <style>
-:root{--ink:#17352e;--muted:#62756f;--paper:#fbfaf6;--card:#fff;--line:#dfe6e1;--mint:#dff2e8;--green:#166348;--orange:#f09b4a;--shadow:0 12px 35px rgba(23,53,46,.08)}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#e9f5ef 0,#fbfaf6 320px);color:var(--ink);font-family:Arial,"Noto Sans Hebrew",sans-serif;min-height:100vh}.wrap{max-width:980px;margin:auto;padding:20px 16px 90px}header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:12px 2px 24px}.eyebrow{color:var(--green);font-weight:700;font-size:14px}.title{font-size:clamp(32px,7vw,56px);line-height:.98;margin:8px 0 10px;letter-spacing:-2px}.subtitle{color:var(--muted);margin:0;font-size:16px}.badge{background:#fff;border:1px solid var(--line);padding:9px 12px;border-radius:999px;box-shadow:var(--shadow);white-space:nowrap}.panel{background:rgba(255,255,255,.93);border:1px solid var(--line);border-radius:24px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}.trip-controls{display:grid;grid-template-columns:1.2fr 1.2fr 1fr;gap:14px}.control label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}.stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--paper);height:48px}.stepper button{width:44px;height:100%;border:0;background:transparent;font-size:22px;color:var(--green);cursor:pointer}.stepper span{flex:1;text-align:center;font-weight:800}.summary{background:var(--mint);border-radius:14px;display:flex;flex-direction:column;justify-content:center;padding:7px 14px}.summary strong{font-size:22px}.summary small{color:var(--muted)}.tabs{display:flex;gap:8px;overflow:auto;padding:4px 0 10px;scrollbar-width:none}.tab{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:11px 16px;white-space:nowrap;font-weight:700;cursor:pointer}.tab.active{background:var(--ink);color:#fff;border-color:var(--ink)}.tools{display:flex;gap:10px;margin-bottom:12px}.search{flex:1;border:1px solid var(--line);background:#fff;border-radius:14px;padding:12px 14px;font-size:16px;color:var(--ink)}button.action{border:1px solid var(--line);background:#fff;border-radius:14px;padding:0 15px;color:var(--ink);font-weight:700;cursor:pointer}.section-head{display:flex;align-items:end;justify-content:space-between;gap:10px;margin:8px 2px 12px}.section-head h2{margin:0;font-size:26px}.section-head p{margin:5px 0 0;color:var(--muted);font-size:14px}.progress{font-weight:800;color:var(--green)}.bar{height:8px;background:#e9eeeb;border-radius:99px;overflow:hidden;margin-bottom:14px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--green),#4da47f);transition:.25s}.list{display:grid;gap:9px}.item{display:grid;grid-template-columns:36px minmax(130px,1.4fr) minmax(110px,.75fr) minmax(100px,.75fr) 38px;gap:10px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:16px;padding:10px 12px;transition:.2s}.item.done{opacity:.58;background:#f1f4f2}.item.done .name{text-decoration:line-through}.check{appearance:none;width:26px;height:26px;border:2px solid #9aaca5;border-radius:8px;cursor:pointer;display:grid;place-content:center}.check:checked{background:var(--green);border-color:var(--green)}.check:checked:after{content:'✓';color:#fff;font-size:17px}.name{font-weight:800}.note{display:block;color:var(--muted);font-size:12px;margin-top:3px}.qty,.who{width:100%;border:1px solid transparent;background:var(--paper);border-radius:10px;padding:10px;color:var(--ink);font-size:14px}.qty:focus,.who:focus{outline:2px solid #a8d7c2;background:#fff}.delete{border:0;background:transparent;color:#9aaca5;font-size:19px;cursor:pointer}.empty{text-align:center;border:1px dashed #afc5bb;border-radius:18px;padding:35px 16px;background:#fff;color:var(--muted)}.empty b{display:block;color:var(--ink);font-size:20px;margin-bottom:7px}.add{width:100%;margin-top:11px;border:1px dashed #83a997;background:#eef8f3;border-radius:15px;padding:13px;color:var(--green);font-weight:800;font-size:15px;cursor:pointer}.footer-actions{position:fixed;bottom:0;left:0;right:0;background:rgba(251,250,246,.92);backdrop-filter:blur(10px);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:10px}.footer-actions button{border:0;border-radius:14px;padding:13px 22px;font-weight:800;cursor:pointer}.primary{background:var(--green);color:#fff}.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)!important}.source{font-size:12px;color:var(--muted);text-align:center;margin-top:18px}.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 17px;border-radius:999px;opacity:0;pointer-events:none;transition:.2s;z-index:3}.toast.on{opacity:1;transform:translateX(-50%)}dialog{border:0;border-radius:22px;padding:22px;max-width:390px;width:calc(100% - 32px);box-shadow:0 30px 80px rgba(0,0,0,.22)}dialog::backdrop{background:rgba(18,38,32,.46)}dialog h3{margin-top:0}dialog input,dialog select{width:100%;padding:12px;border:1px solid var(--line);border-radius:12px;margin:5px 0 12px;font-size:16px}dialog menu{padding:0;margin:8px 0 0;display:flex;gap:8px}dialog button{flex:1;padding:11px;border-radius:12px;border:1px solid var(--line);font-weight:700}@media(max-width:650px){.wrap{padding-top:12px}.badge{display:none}.trip-controls{grid-template-columns:1fr 1fr}.summary{grid-column:1/-1;min-height:60px}.item{grid-template-columns:34px 1fr 100px 34px}.who{grid-column:2/4}.title{letter-spacing:-1px}.footer-actions button{flex:1}.section-head{align-items:center}}
-.name-edit{width:100%;border:1px solid transparent;background:transparent;border-radius:9px;padding:5px 7px;font:inherit;font-weight:800;color:var(--ink);direction:rtl;text-align:right;transition:.18s}.name-edit:hover{border-color:#d8cfbf;background:#fff}.name-edit:focus{outline:2px solid var(--accent);border-color:transparent;background:#fff}.name-edit::selection{background:#d9ecd4}
-.sync-actions{display:flex;flex-wrap:wrap;gap:8px}.sync-actions button{min-height:44px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--mint);color:var(--ink);font:inherit}#sync{padding:18px;margin:18px 0}#syncStatus{display:block}#sync p{overflow-wrap:anywhere}button:disabled,input:disabled{opacity:.65}.source{margin-bottom:20px}
-@media(max-width:400px){.tools{flex-wrap:wrap}.tools .search{min-width:0;flex:1 1 160px}.tools .action{flex:0 0 auto}.tabs{flex-wrap:wrap}.item{grid-template-columns:28px minmax(0,1fr) 64px 28px;gap:6px}.trip-controls{gap:8px}.control{min-width:0}.stepper{min-width:0}}
-@media(max-width:400px){.sync-actions{gap:6px}.sync-actions button{font-size:14px;padding:8px}#sync{padding:14px}}
-</style></head>
-<body><div class="wrap">
-<header><div><div class="eyebrow">סופ״ש של זיינים</div><h1 class="title">רשימת קניות צימרים</h1><p class="subtitle">רשימה אחת, כמויות שמתעדכנות, ואף מלפפון לא נשכח.</p></div><div class="badge">2 ארוחות בוקר + שישי בערב</div></header>
-<section id="sync" class="panel" aria-live="polite"><strong id="syncStatus">טוען רשימה משותפת…</strong><p>הצפייה ציבורית. עריכה דורשת קוד. שמרו שינויים לפני יציאה.</p><div class="sync-actions"><button id="unlock">כניסה לעריכה</button><button id="commit">שמירה לכולם</button><button id="reloadShared">טעינה מהמשותף</button><button id="backup">הורדת גיבוי</button><button id="importOld">ייבוא הרשימה הישנה</button><button id="importFile">ייבוא גיבוי מקובץ</button><input type="file" id="backupFile" accept="application/json,.json" hidden><button id="lock">נעילת עריכה</button></div><p id="localNotice"></p></section><section class="panel trip-controls"><div class="control"><label>כמות מבוגרים</label><div class="stepper"><button data-step="adults" data-delta="-1">−</button><span id="adults">36</span><button data-step="adults" data-delta="1">+</button></div></div><div class="control"><label>כמות ילדים מעל גיל 4</label><div class="stepper"><button data-step="children" data-delta="-1">−</button><span id="children">0</span><button data-step="children" data-delta="1">+</button></div></div><div class="summary"><strong id="people">36</strong><small>מבוגרים משוקללים</small></div></section>
-<div class="tabs" id="tabs"></div><div class="tools"><input id="search" class="search" placeholder="חיפוש ברשימה…"><button class="action" id="reset">איפוס בטיוטה</button></div>
-<section class="panel"><div class="section-head"><div><h2 id="sectionTitle"></h2><p id="sectionHint"></p></div><span id="progress"></span></div><div class="progress"><div id="progressBar"></div></div><div id="list"></div><button class="add" id="add">＋ הוספת פריט לקטגוריה</button></section><div class="source">נבנה על בסיס הגיליון שצירפת · שינויים משותפים נשמרים רק בלחיצה על שמירה. טיוטה מקומית נשמרת במכשיר.</div></div>
-<div class="footer-actions"><button class="secondary" id="copy">העתקת רשימה</button><button class="primary" id="share">שיתוף</button></div><div class="toast" id="toast"></div>
-<dialog id="saveConfirm"><form id="saveConfirmForm"><h3>לשמור את הטיוטה כרשימה הציבורית לכולם?</h3><menu><button type="button" onclick="this.closest('dialog').close()">ביטול</button><button type="submit" class="primary">שמירה לכולם</button></menu></form></dialog>
-<dialog id="editLogin"><form id="editLoginForm"><h3>כניסה לעריכה</h3><label for="editCode">קוד עריכה</label><input id="editCode" type="password" autocomplete="off" minlength="20" required><p>הקוד נשמר בזיכרון הלשונית בלבד.</p><menu><button type="button" onclick="this.closest('dialog').close()">ביטול</button><button class="primary" type="submit">כניסה</button></menu></form></dialog>
-<dialog id="dialog"><form method="dialog" id="addForm"><h3>הוספת פריט</h3><label>מה צריך?</label><input id="newName" required="" placeholder="לדוגמה: פיתות"><label>כמות בסיסית</label><input id="newQty" placeholder="לדוגמה: 4 חבילות"><label>הערה</label><input id="newNote" placeholder="לא חובה"><menu><button value="cancel">ביטול</button><button value="default" class="primary">הוספה</button></menu></form></dialog>
+:root {
+  color-scheme: light;
+  --bg: #f6f3ec;
+  --card: #fff;
+  --ink: #1d2b25;
+  --muted: #6b7a73;
+  --line: #e4e0d6;
+  --brand: #1f4d3a;
+  --brand-soft: #e3efe8;
+  --accent: #e07a2f;
+  --accent-soft: #fbeadc;
+  --good: #23824f;
+  --bad: #c0392b;
+  --radius: 16px;
+  --shadow: 0 6px 20px rgba(29, 43, 37, .07);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Arial, "Noto Sans Hebrew", sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+
+/* Login */
+.gate { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: linear-gradient(180deg, var(--brand) 0, var(--brand) 40%, var(--bg) 40%); }
+.gate .card { width: 100%; max-width: 380px; text-align: center; }
+.gate h1 { margin: 6px 0 4px; font-size: 28px; }
+.gate p { color: var(--muted); margin: 0 0 18px; }
+.gate .emoji { font-size: 48px; }
+
+/* Layout */
+.top { background: var(--brand); color: #fff; padding: 18px 16px 22px; padding-top: calc(18px + env(safe-area-inset-top)); }
+.top-inner, main { max-width: 720px; margin: 0 auto; }
+.top-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.top h1 { margin: 0; font-size: 26px; line-height: 1.15; }
+.meta { margin-top: 4px; opacity: .85; font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { border: 0; background: rgba(255, 255, 255, .16); color: #fff; border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.icon-btn { border: 0; background: rgba(255, 255, 255, .16); color: #fff; width: 40px; height: 40px; border-radius: 12px; font-size: 20px; flex: none; }
+.sync { font-size: 12px; opacity: .8; margin-top: 8px; min-height: 1em; }
+main { padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 14px; }
+.card h2 { margin: 0 0 10px; font-size: 18px; }
+.card h2 small { color: var(--muted); font-weight: 400; font-size: 14px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+/* Bottom tabs */
+nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; background: rgba(255, 255, 255, .96); backdrop-filter: blur(8px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+nav.tabs .inner { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); }
+nav.tabs button { border: 0; background: none; padding: 8px 2px 9px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; color: var(--muted); }
+nav.tabs button b { font-size: 21px; line-height: 1.2; font-weight: 400; }
+nav.tabs button.on { color: var(--brand); font-weight: 700; }
+
+/* Buyer card */
+.buyer { display: grid; gap: 10px; background: var(--accent-soft); border-color: #f1d3b9; }
+.buyer label { font-weight: 700; }
+.spent { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spent strong { font-size: 18px; }
+
+/* Forms */
+input[type=text], input[type=number], input[type=date], input[type=password], select {
+  width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; background: #fff; font-size: 16px;
+}
+input:focus, select:focus { outline: 2px solid #9cc9b2; border-color: transparent; }
+.btn { min-height: 44px; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 8px 14px; font-weight: 700; }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--bad); }
+.btn.block { width: 100%; }
+.btn.sm { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+.quick { display: grid; grid-template-columns: 1fr 96px 44px; gap: 8px; margin-bottom: 12px; }
+.quick .btn { padding: 0; font-size: 22px; }
+
+/* Lists */
+.progress-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 14px; color: var(--muted); }
+.bar { height: 6px; border-radius: 99px; background: #ece8df; overflow: hidden; margin-bottom: 14px; }
+.bar i { display: block; height: 100%; background: var(--good); transition: width .25s; }
+ul.rows { list-style: none; margin: 0; padding: 0; }
+.row { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #f0ede6; min-height: 52px; }
+.row:last-child { border-bottom: 0; }
+.row .grow { flex: 1; min-width: 0; }
+.row .title { border: 0; background: none; padding: 0; text-align: right; width: 100%; font-weight: 600; overflow-wrap: anywhere; }
+.row .sub { display: block; font-size: 13px; color: var(--muted); font-weight: 400; }
+.row.done .title { text-decoration: line-through; color: var(--muted); }
+.row select { width: auto; max-width: 46%; min-height: 38px; font-size: 14px; padding: 4px 8px; }
+.row select.unset { color: var(--accent); border-color: #f1c9a6; }
+.check { appearance: none; -webkit-appearance: none; flex: none; width: 28px; height: 28px; border: 2px solid #b8c3bd; border-radius: 8px; display: grid; place-content: center; margin: 0; background: #fff; }
+.check:checked { background: var(--good); border-color: var(--good); }
+.check:checked::after { content: '✓'; color: #fff; font-size: 17px; font-weight: 700; }
+.x { border: 0; background: none; color: #a9b3ae; font-size: 22px; width: 36px; height: 36px; flex: none; border-radius: 10px; }
+.empty { text-align: center; color: var(--muted); padding: 18px 8px; }
+
+/* Money */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: var(--brand-soft); border-radius: 12px; padding: 10px; text-align: center; }
+.stat strong { display: block; font-size: 19px; }
+.stat span { font-size: 12px; color: var(--muted); }
+.amount { font-weight: 700; white-space: nowrap; }
+.plus { color: var(--good); }
+.minus { color: var(--bad); }
+.transfer { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f0ede6; }
+.transfer:last-child { border-bottom: 0; }
+.transfer .grow { flex: 1; }
+.transfer.done .grow { color: var(--muted); text-decoration: line-through; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 99px; background: #f0ede6; color: var(--muted); margin-inline-start: 6px; }
+
+/* People */
+.person { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid #f0ede6; }
+.person:last-child { border-bottom: 0; }
+.person-head { display: flex; align-items: center; gap: 8px; }
+.person-head .title { flex: 1; border: 0; background: none; text-align: right; font-weight: 700; font-size: 17px; padding: 0; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.pill { border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 4px 11px; font-size: 13px; }
+.pill.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.pill.off { background: #fbe9e7; border-color: #f3c4bd; color: var(--bad); text-decoration: line-through; }
+
+/* Dialogs */
+dialog { border: 0; border-radius: 20px; padding: 20px; width: min(420px, calc(100% - 32px)); box-shadow: 0 24px 70px rgba(0, 0, 0, .25); }
+dialog::backdrop { background: rgba(16, 30, 24, .5); }
+dialog h3 { margin: 0 0 14px; }
+dialog label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
+dialog .actions { display: flex; gap: 8px; margin-top: 18px; }
+dialog .actions .btn { flex: 1; }
+.menu-list { display: grid; gap: 8px; }
+.menu-list .btn { text-align: right; font-weight: 600; }
+
+.toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 12px); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 99px; font-size: 14px; opacity: 0; pointer-events: none; transition: .2s; z-index: 20; max-width: calc(100% - 32px); text-align: center; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 380px) {
+  .quick { grid-template-columns: 1fr 72px 44px; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .stats .stat:last-child { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+
+<section class="gate" id="gate" hidden>
+  <form class="card" id="gateForm">
+    <div class="emoji">🏕️</div>
+    <h1>סופ״ש צימרים</h1>
+    <p>הכניסו את קוד הקבוצה. צריך לעשות את זה רק פעם אחת בכל מכשיר.</p>
+    <input type="password" id="gateCode" autocomplete="current-password" placeholder="קוד הקבוצה" required>
+    <p class="small" id="gateError" style="color:var(--bad);margin:8px 0 0"></p>
+    <button class="btn primary block" style="margin-top:14px">כניסה</button>
+  </form>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="top-inner">
+      <div class="top-row">
+        <div>
+          <h1 id="evTitle"></h1>
+          <div class="meta" id="evMeta"></div>
+        </div>
+        <button class="icon-btn" id="menuBtn" aria-label="תפריט">☰</button>
+      </div>
+      <div class="chips">
+        <button class="chip" id="peopleChip"></button>
+        <button class="chip" id="moneyChip"></button>
+      </div>
+      <div class="sync" id="sync"></div>
+    </div>
+  </header>
+  <main id="view"></main>
+  <nav class="tabs"><div class="inner" id="tabs"></div></nav>
+</div>
+
+<dialog id="dlg"><form id="dlgForm" method="dialog"></form></dialog>
+<div class="toast" id="toast"></div>
+
 <script type="module" src="/app.js"></script>
-</body></html>
+</body>
+</html>

@@ -1,53 +1,578 @@
-const categories=['breakfast','bbq','alcohol','general'];
-const plain=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
-const keys=(x,allowed)=>plain(x)&&Object.keys(x).every(k=>allowed.includes(k));
-const validText=(x,max)=>typeof x==='string'&&x.length<=max&&!/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(x);
-function validState(x){
- if(!keys(x,['adults','children','data'])||!Number.isInteger(x.adults)||!Number.isInteger(x.children)||x.adults<0||x.children<0||x.adults>100||x.children>100||!keys(x.data,categories)||categories.some(k=>!x.data[k]))return false;
- let n=0;const ids=new Set();
- for(const k of categories){const s=x.data[k];if(!keys(s,['title','hint','items'])||!validText(s.title,200)||!validText(s.hint,2000)||!Array.isArray(s.items))return false;
-  for(const it of s.items){if(++n>500||!keys(it,['id','name','qty','note','baseQty','scale','done','who'])||!validText(it.id,100)||!it.id||ids.has(it.id)||!validText(it.name,300)||!it.name.trim()||!validText(it.qty,100)||!validText(it.baseQty,100)||!validText(it.note,2000)||!validText(it.who,200)||typeof it.scale!=='boolean'||typeof it.done!=='boolean')return false;ids.add(it.id);}
- }return true;
-}
-const baseline=36;
-const labels={breakfast:'בוקר ×2',bbq:'על האש',alcohol:'אלכוהול',general:'כללי'};
-function mk(name,qty='',note='',scale=false){return{id:crypto.randomUUID(),name,qty,note,baseQty:qty,scale,done:false,who:''}}
-const initial=await fetch('/initial-state.json').then(r=>{if(!r.ok)throw Error('Initial list unavailable');return r.json()});
-const TEST_MODE=new URLSearchParams(location.search).get('test')==='1';
-const API_URL='/api/list'+(TEST_MODE?'?test=1':'');
-const OLD='zimmer-list-v5', DRAFT='zayanim-shared-draft-v2'+(TEST_MODE?'-test':''), BACKUP='zayanim-legacy-backup-v2';
-const oldRaw=localStorage.getItem(OLD);
-try{if(oldRaw&&!localStorage.getItem(BACKUP))localStorage.setItem(BACKUP,oldRaw);}catch{alert('אין מקום לשמור גיבוי. הורידו גיבוי לפני עריכה.');}
-let state=structuredClone(initial);state.active='breakfast';
-let editable=false,code='',revision=null,dirty=false,busy=false,loaded=false;
-const status=s=>document.getElementById('syncStatus').textContent=s;
-function shared(){const {active,...data}=state;return data;}
-function stash(){try{localStorage.setItem(DRAFT,JSON.stringify({state:shared(),baseRevision:revision}));}catch{status('לא ניתן לשמור טיוטה במכשיר. הורידו גיבוי.');}}
-function save(){if(!editable)return;dirty=true;stash();status('טיוטה מקומית לא נשמרה לכולם');applyLocks();}
-function applyLocks(){document.querySelectorAll('.name-edit,.qty,.who,.check,.delete,[data-step],#add,#reset').forEach(el=>el.disabled=!editable||busy);document.getElementById('commit').disabled=!editable||!loaded||busy||!dirty;document.getElementById('unlock').disabled=editable||busy;document.getElementById('lock').disabled=!editable||busy;document.getElementById('importOld').disabled=!editable||busy;document.getElementById('importFile').disabled=!editable||busy;}
-async function api(method='GET',body){const headers={};if(code)headers['X-Edit-Code']=code;if(body)headers['Content-Type']='application/json';const r=await fetch(API_URL,{method,headers,body:body?JSON.stringify(body):undefined,cache:'no-store'});const data=await r.json();if(!r.ok){const e=Error(data.error||'Request failed');e.status=r.status;throw e;}return data;}
-async function refresh(ask=true){if(dirty&&ask&&!confirm('הטעינה תחליף את הטיוטה. הורידו גיבוי קודם אם תרצו לשמור אותה. להמשיך?'))return;busy=true;applyLocks();try{const data=await api();if(data.state&&!validState(data.state))throw Error('Invalid server list');revision=data.revision;const active=state.active;state=structuredClone(data.state||initial);state.active=active;dirty=false;loaded=true;status(data.state?'הרשימה המשותפת נטענה':'אין רשימה משותפת עדיין. בעל הקוד יכול לייבא או לשמור רשימה ראשונה.');render();}catch(e){loaded=false;status('השמירה המשותפת אינה זמינה. המידע הישן נשאר במכשיר. '+e.message);}finally{busy=false;applyLocks();}}
-function download(value,name){const blob=new Blob([value],{type:'application/json;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function legacyState(raw){const x=JSON.parse(raw);if(x.adults==null){x.adults=Math.round((Number(x.families)||8)*(Number(x.perFamily)||4.5));x.children=0;}x.adults=Math.max(0,Math.min(100,Math.round(Number(x.adults)||0)));x.children=Math.max(0,Math.min(100,Math.round(Number(x.children)||0)));delete x.families;delete x.perFamily;delete x.active;if(!validState(x))throw Error('Invalid backup structure');return x;}
-document.getElementById('unlock').onclick=()=>document.getElementById('editLogin').showModal();
-document.getElementById('editLoginForm').onsubmit=e=>{e.preventDefault();const input=document.getElementById('editCode'),next=input.value;input.value='';document.getElementById('editLogin').close();if(!next)return;if(next.length<20){alert('נדרש קוד העריכה הארוך שנוצר בהגדרה');return;}code=next;editable=true;if(TEST_MODE&&!loaded)refresh(false);status('מצב עריכה. הקוד ייבדק בשרת בעת שמירה.');applyLocks();const draft=localStorage.getItem(DRAFT);if(draft&&confirm('נמצאה טיוטה קודמת במכשיר. לטעון אותה?')){try{const d=JSON.parse(draft);if(!validState(d.state))throw Error();state={...d.state,active:state.active};revision=d.baseRevision;dirty=true;render();status('טיוטה קודמת נטענה. אם המשותף השתנה, השמירה תיעצר ולא תחליף אותו.');}catch{status('הטיוטה הקודמת לא נקראה');}}};
-document.getElementById('lock').onclick=()=>{if(dirty&&!confirm('הטיוטה נשמרה במכשיר בלבד. לנעול עריכה בלי לפרסם?'))return;code='';editable=false;applyLocks();status('העריכה נעולה');};
-document.getElementById('commit').onclick=()=>{if(editable&&dirty&&!busy&&loaded)document.getElementById('saveConfirm').showModal()};
-document.getElementById('saveConfirmForm').onsubmit=async e=>{e.preventDefault();document.getElementById('saveConfirm').close();if(!editable||!dirty||busy||!loaded)return;busy=true;applyLocks();try{const data=await api('POST',{state:shared(),revision});revision=data.revision;dirty=false;localStorage.removeItem(DRAFT);status('נשמר לכולם');}catch(e){stash();status(e.status===409?'המשותף השתנה. הטיוטה נשמרה במכשיר. הורידו גיבוי וטעינו את המשותף לפני מיזוג.':e.status===401?'קוד העריכה שגוי. הטיוטה נשמרה במכשיר. נעלו ופתחו עם הקוד הנכון.':'לא נשמר לכולם. הטיוטה נשמרה במכשיר. '+e.message);}finally{busy=false;applyLocks();}};
-document.getElementById('reloadShared').onclick=()=>refresh();
-document.getElementById('backup').onclick=()=>{download(JSON.stringify({state:shared(),revision},null,2),'zayanim-current-backup.json');if(oldRaw)download(oldRaw,'zayanim-original-browser-backup.json');};
-document.getElementById('localNotice').textContent=oldRaw?'נמצאה רשימה ישנה בדפדפן הזה. היא לא פורסמה ולא הוחלפה. הורידו גיבוי לפני ייבוא.':'אין כאן רשימה ישנה. לגיבוי העריכות הקודמות השתמשו באותו מכשיר ודפדפן שבהם ערכתם באתר המקורי.';
-document.getElementById('importOld').onclick=()=>{if(!editable)return;const raw=localStorage.getItem(BACKUP)||oldRaw;if(!raw){alert('לא נמצאה כאן רשימה ישנה. יש לבצע מהמכשיר והדפדפן המקוריים.');return;}download(raw,'zayanim-original-browser-backup.json');if(!confirm('ייבוא יחליף את הטיוטה ברשימה הישנה מהמכשיר הזה. הוא לא יפרסם עד לחיצה על שמירה לכולם. להמשיך?'))return;try{state={...legacyState(raw),active:'breakfast'};save();render();}catch{status('הגיבוי לא נקרא. הקובץ המקורי נשמר ולא שונה.');}};
-window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
-function weightedPeople(){return state.adults+state.children*.5}
-function scaled(q){if(!q)return'';const people=state.active==='alcohol'?state.adults:weightedPeople();const f=people/baseline;if(Math.abs(f-1)<.01)return q;return q.replace(/\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?/g,m=>m.split('-').map(n=>{let v=+n*f;v=v<3?Math.round(v*2)/2:Math.ceil(v);return Number.isInteger(v)?v:v.toFixed(1)}).join('-'))}
-function render(){document.getElementById('adults').textContent=state.adults;document.getElementById('children').textContent=state.children;document.getElementById('people').textContent=Number.isInteger(weightedPeople())?weightedPeople():weightedPeople().toFixed(1);const tabs=document.getElementById('tabs');tabs.innerHTML='';Object.keys(labels).forEach(k=>{const b=document.createElement('button');b.className='tab '+(state.active===k?'active':'');b.textContent=labels[k];b.onclick=()=>{state.active=k;render()};tabs.appendChild(b)});const sec=state.data[state.active];document.getElementById('sectionTitle').textContent=sec.title;document.getElementById('sectionHint').textContent=sec.hint;const query=document.getElementById('search').value.trim();const items=sec.items.filter(x=>!query||x.name.includes(query)||x.note.includes(query));const done=sec.items.filter(x=>x.done).length,total=sec.items.length;document.getElementById('progress').textContent=total?`${done}/${total}`:'0 פריטים';document.getElementById('progressBar').style.width=(total?done/total*100:0)+'%';const list=document.getElementById('list');list.innerHTML='';if(!items.length){list.innerHTML=`<div class="empty"><b>${query?'לא נמצאו פריטים':'הקטגוריה מחכה לכם'}</b>${query?'נסו חיפוש אחר.':'הוסיפו את התוכן כשתהיו מוכנים.'}</div>`}items.forEach(it=>{const row=document.createElement('div');row.className='item '+(it.done?'done':'');const shown=it.scale?scaled(it.baseQty):it.qty;row.innerHTML=`<input class="check" type="checkbox" ${it.done?'checked':''}><div><input class="name-edit" aria-label="שם המוצר"><span class="note"></span></div><input class="qty" aria-label="כמות" placeholder="כמות"><input class="who" aria-label="אחראי" placeholder="מי מביא?"><button class="delete" aria-label="מחיקה">×</button>`;const name=row.querySelector('.name-edit');name.value=it.name;name.onchange=()=>{const next=name.value.trim();if(next){it.name=next;name.value=next;save()}else{name.value=it.name}};row.querySelector('.note').textContent=it.note||'';const cb=row.querySelector('.check');cb.onchange=()=>{it.done=cb.checked;save();render()};const qty=row.querySelector('.qty');qty.value=shown;qty.onchange=()=>{it.qty=qty.value;it.baseQty=qty.value;it.scale=false;save();render()};const who=row.querySelector('.who');who.value=it.who;who.onchange=()=>{it.who=who.value;save()};row.querySelector('.delete').onclick=()=>{if(confirm(`למחוק את ${it.name}?`)){sec.items=sec.items.filter(x=>x.id!==it.id);save();render()}};list.appendChild(row)});applyLocks()}
-document.querySelectorAll('[data-step]').forEach(b=>b.onclick=()=>{const k=b.dataset.step,d=+b.dataset.delta;state[k]=Math.max(0,Math.min(100,state[k]+d));save();render()});document.getElementById('search').oninput=render;document.getElementById('add').onclick=()=>document.getElementById('dialog').showModal();document.getElementById('addForm').onsubmit=e=>{if(e.submitter.value==='cancel')return;const n=document.getElementById('newName'),q=document.getElementById('newQty'),no=document.getElementById('newNote');state.data[state.active].items.push(mk(n.value.trim(),q.value.trim(),no.value.trim(),false));n.value=q.value=no.value='';save();render()};
-function text(){let out=`רשימת קניות צימרים · ${state.adults} מבוגרים + ${state.children} ילדים מעל גיל 4 · ${weightedPeople()} מבוגרים משוקללים\n`;for(const k of Object.keys(labels)){const a=state.data[k].items;if(!a.length)continue;out+=`\n${state.data[k].title}\n`;a.forEach(x=>out+=`${x.done?'✓':'○'} ${x.name}${(x.scale?scaled(x.baseQty):x.qty)?' — '+(x.scale?scaled(x.baseQty):x.qty):''}${x.who?' · '+x.who:''}\n`)}return out}
-async function clipboard(){await navigator.clipboard.writeText(text());toast('הרשימה הועתקה')};document.getElementById('copy').onclick=clipboard;document.getElementById('share').onclick=async()=>{if(navigator.share)try{await navigator.share({title:'רשימת קניות צימרים',text:text(),url:location.href});return}catch(e){}clipboard()};document.getElementById('reset').onclick=()=>{if(editable&&confirm('לאפס את הטיוטה? המשותף לא משתנה עד שמירה.')){state=structuredClone(initial);state.active='breakfast';save();render()}};function toast(s){const t=document.getElementById('toast');t.textContent=s;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800)}
-render(); await refresh(false);
-// Pause refreshes while hidden, editing, or dirty. No silent draft overwrites.
-setInterval(()=>{if(!document.hidden&&!editable&&!dirty&&!busy)refresh(false)},60000);
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, applyOp, newId, settle, headcount, total, shekels } from './model.js';
 
-document.getElementById('importFile').onclick=()=>document.getElementById('backupFile').click();
-document.getElementById('backupFile').onchange=async e=>{const file=e.target.files[0];if(!file||!editable)return;if(file.size>200000){alert('קובץ גדול מדי');return;}try{const raw=JSON.parse(await file.text());const data=raw.state||raw;if(!data.data||!data.data.breakfast||!data.data.bbq||!data.data.alcohol||!data.data.general)throw Error();if(!confirm('להחליף את הטיוטה בגיבוי? השמירה הציבורית תקרה רק אחרי שמירה לכולם.'))return;download(JSON.stringify(shared()),'zayanim-before-import.json');state={...legacyState(JSON.stringify(data)),active:'breakfast'};save();render();}catch{alert('הגיבוי לא נקרא. לא פורסם שינוי.');}e.target.value='';};
+const TEST = new URLSearchParams(location.search).get('test') === '1';
+const API = '/api/list' + (TEST ? '?test=1' : '');
+const CODE_KEY = 'zayanim-code' + (TEST ? '-test' : '');
+const TAB_KEY = 'zayanim-tab';
+const POLL_MS = 20_000;
+
+const TABS = [
+  { id: 'meat', icon: '🥩', label: 'בשר' },
+  { id: 'alcohol', icon: '🍷', label: 'אלכוהול' },
+  { id: 'general', icon: '🛒', label: 'כללי' },
+  { id: 'gear', icon: '🎒', label: 'ציוד' },
+  { id: 'money', icon: '💸', label: 'התחשבנות' },
+];
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const local = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode: just not remembered */ } },
+  del: k => { try { localStorage.removeItem(k); } catch { /* ignore */ } },
+};
+
+let code = '';
+let server = null;     // last state confirmed by the server
+let revision = null;
+let state = null;      // server state + edits not yet confirmed
+let queue = [];        // edits waiting to be sent
+let sending = false;
+let offline = false;
+let tab = local.get(TAB_KEY) || 'meat';
+let backTab = 'meat';
+
+// ---------- server ----------
+
+async function api(method, body) {
+  const r = await fetch(API, {
+    method,
+    cache: 'no-store',
+    headers: { 'X-Edit-Code': code, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try { data = await r.json(); } catch { /* non-JSON error page */ }
+  if (!r.ok) throw Object.assign(new Error(data.error || 'שגיאה בשרת'), { status: r.status, data });
+  return data;
+}
+
+function accept(data) {
+  server = data.state;
+  revision = data.revision;
+  state = queue.reduce((s, op) => { try { return applyOp(s, op); } catch { return s; } }, server);
+  render();
+}
+
+// Apply an edit on screen right away, then send it in the background.
+function send(op) {
+  try { state = applyOp(state, op); } catch (e) { toast(e.message); return false; }
+  queue.push(op);
+  render();
+  flush();
+  return true;
+}
+
+async function flush() {
+  if (sending || !queue.length) return;
+  sending = true;
+  updateSync();
+  const batch = queue.slice(0, 50);
+  try {
+    const data = await api('POST', { ops: batch });
+    queue.splice(0, batch.length);
+    offline = false;
+    accept(data);
+  } catch (e) {
+    if (e.status === 422) {
+      // Someone else's change made one edit impossible (e.g. they deleted the item). Drop just that one.
+      queue.splice(e.data?.index ?? 0, 1);
+      toast(e.message);
+      if (e.data?.state) accept(e.data);
+    } else if (e.status === 401) {
+      queue = [];
+      logout('קוד הקבוצה השתנה. הכניסו את הקוד החדש.');
+    } else {
+      offline = true;
+      setTimeout(() => { offline = false; flush(); }, 5000);
+    }
+  } finally {
+    sending = false;
+    updateSync();
+    if (queue.length && !offline) flush();
+  }
+}
+
+async function refresh() {
+  if (!code || sending || queue.length) return;
+  try {
+    const data = await api('GET');
+    offline = false;
+    if (data.revision !== revision) accept(data);
+  } catch (e) {
+    if (e.status === 401) logout('קוד הקבוצה השתנה. הכניסו את הקוד החדש.');
+    else offline = true;
+  }
+  updateSync();
+}
+
+setInterval(() => { if (document.visibilityState === 'visible') refresh(); }, POLL_MS);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(); });
+window.addEventListener('beforeunload', e => { if (queue.length) e.preventDefault(); });
+
+// ---------- login ----------
+
+async function login(c) {
+  code = c;
+  $('gateError').textContent = '';
+  try {
+    const data = await api('GET');
+    local.set(CODE_KEY, c);
+    $('gate').hidden = true;
+    $('app').hidden = false;
+    accept(data);
+  } catch (e) {
+    if (e.status === 401) { local.del(CODE_KEY); code = ''; }
+    showGate(e.status === 401 ? 'הקוד לא נכון' : e.message);
+  }
+}
+
+function showGate(error = '') {
+  $('app').hidden = true;
+  $('gate').hidden = false;
+  $('gateError').textContent = error;
+}
+
+function logout(msg = '') {
+  local.del(CODE_KEY);
+  code = '';
+  showGate(msg);
+}
+
+$('gateForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const c = $('gateCode').value.trim();
+  $('gateCode').value = '';
+  if (c) login(c);
+});
+
+// ---------- helpers ----------
+
+const person = id => state.people.find(p => p.id === id);
+const personName = id => person(id)?.name ?? '—';
+const options = (selected, empty) =>
+  `<option value="">${esc(empty)}</option>` +
+  state.people.map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
+
+function groupSummary() {
+  const couples = state.people.filter(p => p.size === 2).length;
+  const singles = state.people.length - couples;
+  if (!state.people.length) return '👫 הוסיפו את החברים';
+  const parts = [];
+  if (couples) parts.push(couples === 1 ? 'זוג אחד' : `${couples} זוגות`);
+  if (singles) parts.push(singles === 1 ? 'יחיד אחד' : `${singles} יחידים`);
+  return `👫 ${parts.join(' + ')} · ${headcount(state)} אנשים`;
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+
+async function copyText(text, done = 'הועתק - אפשר להדביק בוואטסאפ') {
+  try { await navigator.clipboard.writeText(text); toast(done); }
+  catch { prompt('העתיקו מכאן:', text); }
+}
+
+function updateSync() {
+  const el = $('sync');
+  if (offline) el.textContent = '⚠️ אין חיבור - השינויים יישמרו כשהחיבור יחזור';
+  else if (sending || queue.length) el.textContent = 'שומר…';
+  else el.textContent = '✓ הכל שמור · מתעדכן אוטומטית אצל כולם';
+}
+
+// ---------- render ----------
+
+let renderLater = false;
+function render() {
+  if (!state) return;
+  // A redraw must not close a dropdown someone is using. Wait until they leave it, plus a beat,
+  // so the tap that moved focus away still lands on the button it was aimed at.
+  const active = document.activeElement;
+  if (active?.tagName === 'SELECT' && $('view').contains(active)) {
+    if (!renderLater) {
+      renderLater = true;
+      active.addEventListener('blur', () => setTimeout(() => { renderLater = false; render(); }, 300), { once: true });
+    }
+    return;
+  }
+  const kept = [...$('view').querySelectorAll('input[data-keep]')].map(i => [i.id, i.value]);
+  const focused = active?.id;
+
+  $('evTitle').textContent = state.event.title;
+  $('evMeta').textContent = [fmtDate(state.event.date), state.event.place].filter(Boolean).join(' · ') || 'תאריך ומקום - מהתפריט ☰';
+  $('peopleChip').textContent = groupSummary();
+  $('moneyChip').textContent = '💸 ' + shekels(total(state));
+  document.title = state.event.title;
+
+  $('tabs').innerHTML = TABS.map(t =>
+    `<button data-tab="${t.id}" class="${tab === t.id ? 'on' : ''}"><b>${t.icon}</b>${t.label}</button>`).join('');
+
+  $('view').innerHTML = LISTS.includes(tab) ? listView(tab)
+    : tab === 'gear' ? gearView()
+    : tab === 'money' ? moneyView()
+    : peopleView();
+
+  for (const [id, value] of kept) { const el = $(id); if (el) el.value = value; }
+  if (focused && $(focused) && $('view').contains($(focused))) $(focused).focus();
+  updateSync();
+}
+
+function noPeopleHint() {
+  return state.people.length ? '' :
+    `<section class="card"><b>קודם כל - מי מגיע?</b><p class="muted small">הוסיפו את הזוגות, ואז אפשר לבחור מי קונה מה ולהתחשבן בסוף.</p><button class="btn primary" data-act="goPeople">הוספת החברים</button></section>`;
+}
+
+function listView(k) {
+  const items = state.lists[k];
+  const buyer = state.buyers[k];
+  const done = items.filter(i => i.done).length;
+  const exp = state.expenses.filter(x => x.cat === k);
+  const spent = exp.reduce((n, x) => n + x.amount, 0);
+  const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
+  return `
+  ${noPeopleHint()}
+  <section class="card buyer">
+    <label for="buyer-${k}">🛍️ מי קונה ${esc(LIST_LABELS[k])}?</label>
+    <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}">${options(buyer, 'עוד לא נקבע - בחרו')}</select>
+    <div class="spent">
+      <span>שולם עד עכשיו: <strong>${shekels(spent)}</strong></span>
+      <button class="btn accent sm" data-act="addExpense" data-cat="${k}">+ הוספת קבלה</button>
+    </div>
+    ${exp.map(x => `<div class="small">🧾 ${esc(x.what)} · ${shekels(x.amount)} · שילם/ה: ${esc(personName(x.payer))}</div>`).join('')}
+  </section>
+  <section class="card">
+    <h2>רשימת קניות <small>${done} מתוך ${items.length} נקנו</small></h2>
+    <div class="bar"><i style="width:${items.length ? done / items.length * 100 : 0}%"></i></div>
+    <form class="quick" data-form="addItem" data-list="${k}">
+      <input type="text" id="q-name-${k}" data-keep name="name" placeholder="מה עוד צריך?" maxlength="120" required autocomplete="off">
+      <input type="text" id="q-qty-${k}" data-keep name="qty" placeholder="כמות" maxlength="60" autocomplete="off">
+      <button class="btn primary" aria-label="הוספה">+</button>
+    </form>
+    ${items.length ? `<ul class="rows">${sorted.map(it => `
+      <li class="row ${it.done ? 'done' : ''}">
+        <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
+        <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}<span class="sub">${esc([it.qty, it.note].filter(Boolean).join(' · '))}</span></button></div>
+        <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
+      </li>`).join('')}</ul>` : '<div class="empty">הרשימה ריקה. הוסיפו פריט למעלה.</div>'}
+    ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:12px">📋 העתקת מה שחסר לוואטסאפ</button>` : ''}
+  </section>`;
+}
+
+function gearView() {
+  const missing = state.gear.filter(g => !g.who).length;
+  return `
+  ${noPeopleHint()}
+  <section class="card">
+    <h2>ציוד מהבית <small>${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</small></h2>
+    <p class="muted small" style="margin-top:0">דברים שמביאים, לא קונים. בחרו ליד כל פריט מי מביא אותו, וסמנו ✓ כשהוא כבר באוטו.</p>
+    <form class="quick" data-form="addGear" style="grid-template-columns:1fr 44px">
+      <input type="text" id="q-gear" data-keep name="name" placeholder="עוד משהו להביא…" maxlength="120" required autocomplete="off">
+      <button class="btn primary" aria-label="הוספה">+</button>
+    </form>
+    ${state.gear.length ? `<ul class="rows">${state.gear.map(g => `
+      <li class="row ${g.done ? 'done' : ''}">
+        <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="נארז">
+        <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
+        <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
+        <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
+      </li>`).join('')}</ul>` : '<div class="empty">אין ציוד ברשימה.</div>'}
+  </section>`;
+}
+
+function moneyView() {
+  if (!state.people.length) return noPeopleHint();
+  const sum = total(state);
+  const hc = headcount(state);
+  const { share, balance, transfers } = settle(state);
+  const skips = LISTS.map(k => [k, state.people.filter(p => p.skip.includes(k))]).filter(([, ps]) => ps.length);
+  const open = transfers.filter(t => !state.paid.includes(t.key)).length;
+  return `
+  <section class="card">
+    <div class="stats">
+      <div class="stat"><strong>${shekels(sum)}</strong><span>סה״כ הוצאות</span></div>
+      <div class="stat"><strong>${hc ? shekels(Math.round(sum / hc)) : '—'}</strong><span>${skips.length ? 'ממוצע לאדם' : 'לאדם'}</span></div>
+      <div class="stat"><strong>${hc ? shekels(Math.round(sum * 2 / hc)) : '—'}</strong><span>${skips.length ? 'ממוצע לזוג' : 'לזוג'}</span></div>
+    </div>
+    ${skips.length ? `<p class="small muted" style="margin:10px 0 0">${skips.map(([k, ps]) => `לא משתתפים ב${esc(LIST_LABELS[k])}: ${ps.map(p => esc(p.name)).join(', ')}`).join('<br>')}</p>` : ''}
+  </section>
+
+  <section class="card">
+    <h2>מי שילם על מה <small>${state.expenses.length} קבלות</small></h2>
+    ${state.expenses.length ? `<ul class="rows">${state.expenses.map(x => `
+      <li class="row">
+        <div class="grow"><button class="title" data-act="editExpense" data-id="${x.id}">${esc(x.what)}<span class="tag">${esc(CATEGORY_LABELS[x.cat])}</span><span class="sub">שילם/ה: ${esc(personName(x.payer))}</span></button></div>
+        <span class="amount">${shekels(x.amount)}</span>
+        <button class="x" data-act="removeExpense" data-id="${x.id}" aria-label="מחיקה">×</button>
+      </li>`).join('')}</ul>` : '<div class="empty">עוד אין הוצאות. מי שקנה - מוסיף כאן את הסכום מהקבלה.</div>'}
+    <button class="btn accent block" data-act="addExpense" data-cat="" style="margin-top:12px">+ הוספת הוצאה</button>
+  </section>
+
+  ${sum ? `
+  <section class="card">
+    <h2>העברות לסגירת החשבון <small>${open ? `${open} פתוחות` : 'הכל סגור 🎉'}</small></h2>
+    ${transfers.length ? transfers.map(t => {
+      const paid = state.paid.includes(t.key);
+      return `<div class="transfer ${paid ? 'done' : ''}">
+        <input type="checkbox" class="check" data-act="paid" data-key="${esc(t.key)}" ${paid ? 'checked' : ''} aria-label="הועבר">
+        <div class="grow"><b>${esc(personName(t.from))}</b> מעבירים ל<b>${esc(personName(t.to))}</b></div>
+        <span class="amount">${shekels(t.amount)}</span>
+      </div>`;
+    }).join('') : '<div class="empty">כולם שילמו בדיוק את החלק שלהם.</div>'}
+    <button class="btn block" data-act="copySettle" style="margin-top:12px">📋 העתקת ההתחשבנות לוואטסאפ</button>
+  </section>
+
+  <section class="card">
+    <h2>מאזן לכל זוג</h2>
+    <ul class="rows">${state.people.map(p => {
+      const paidBy = state.expenses.filter(x => x.payer === p.id).reduce((n, x) => n + x.amount, 0);
+      const b = balance[p.id];
+      return `<li class="row"><div class="grow"><b>${esc(p.name)}</b><span class="sub">שילמו ${shekels(paidBy)} · החלק שלהם ${shekels(share[p.id])}</span></div>
+        <span class="amount ${b > 0 ? 'plus' : b < 0 ? 'minus' : ''}">${b > 0 ? 'מקבלים ' + shekels(b) : b < 0 ? 'משלמים ' + shekels(-b) : 'מאוזן'}</span></li>`;
+    }).join('')}</ul>
+  </section>` : ''}`;
+}
+
+function peopleView() {
+  return `
+  <section class="card">
+    <h2>מי מגיע <small>${esc(groupSummary().replace('👫 ', ''))}</small></h2>
+    <form class="quick" data-form="addPerson" style="grid-template-columns:1fr 96px 44px">
+      <input type="text" id="q-person" data-keep name="name" placeholder="למשל: דני ומיכל" maxlength="80" required autocomplete="off">
+      <select name="size" aria-label="זוג או יחיד"><option value="2">זוג</option><option value="1">יחיד</option></select>
+      <button class="btn primary" aria-label="הוספה">+</button>
+    </form>
+    <p class="muted small">ההוצאות מתחלקות לפי מספר אנשים: זוג משלם כפול מיחיד. מי שלא שותה או לא אוכל בשר - לחצו על הקטגוריה כדי להוציא אותו ממנה.</p>
+    ${state.people.length ? state.people.map(p => `
+      <div class="person">
+        <div class="person-head">
+          <button class="title" data-act="editPerson" data-id="${p.id}">${esc(p.name)}</button>
+          <button class="pill" data-act="toggleSize" data-id="${p.id}">${p.size === 2 ? '👫 זוג' : '🧍 יחיד'}</button>
+          <button class="x" data-act="removePerson" data-id="${p.id}" aria-label="מחיקה">×</button>
+        </div>
+        <div class="toggles">משתתפים ב:
+          ${LISTS.map(k => `<button class="pill ${p.skip.includes(k) ? 'off' : 'on'}" data-act="toggleSkip" data-id="${p.id}" data-list="${k}">${esc(LIST_LABELS[k])}</button>`).join('')}
+        </div>
+      </div>`).join('') : '<div class="empty">עוד אין אף אחד ברשימה.</div>'}
+  </section>
+  <button class="btn block" data-act="back">→ חזרה</button>`;
+}
+
+// ---------- dialogs ----------
+
+let dlgHandler = null;
+function openDialog(html, onSubmit) {
+  $('dlgForm').innerHTML = html;
+  dlgHandler = onSubmit;
+  $('dlg').showModal();
+}
+$('dlgForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const action = e.submitter?.value || 'ok';
+  const data = Object.fromEntries(new FormData(e.target));
+  $('dlg').close();
+  if (action !== 'cancel') dlgHandler?.(data, action);
+});
+const cancelBtn = '<button class="btn" value="cancel" formnovalidate>ביטול</button>';
+
+function itemDialog(k, it) {
+  openDialog(`<h3>עריכת פריט</h3>
+    <label>מה</label><input type="text" name="name" value="${esc(it.name)}" maxlength="120" required>
+    <label>כמות</label><input type="text" name="qty" value="${esc(it.qty)}" maxlength="60">
+    <label>הערה</label><input type="text" name="note" value="${esc(it.note)}" maxlength="300" placeholder="מותג, איפה קונים…">
+    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}<button class="btn danger" value="delete" formnovalidate>מחיקה</button></div>`,
+  (d, action) => {
+    if (action === 'delete') send({ type: 'removeItem', list: k, id: it.id });
+    else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), note: d.note.trim() } });
+  });
+}
+
+function expenseDialog(x, cat) {
+  const editing = Boolean(x);
+  x ||= { what: cat ? LIST_LABELS[cat] : '', amount: 0, payer: (cat && state.buyers[cat]) || '', cat: cat || 'other' };
+  openDialog(`<h3>${editing ? 'עריכת הוצאה' : 'הוספת הוצאה'}</h3>
+    <label>על מה</label><input type="text" name="what" value="${esc(x.what)}" maxlength="120" required placeholder="למשל: קצביה, סופר, חנות משקאות">
+    <label>סכום (₪)</label><input type="number" name="amount" value="${x.amount ? x.amount / 100 : ''}" min="0.01" step="0.01" inputmode="decimal" required>
+    <label>מי שילם</label><select name="payer" required>${options(x.payer, 'בחרו')}</select>
+    <label>קטגוריה</label><select name="cat">${CATEGORIES.map(c => `<option value="${c}" ${c === x.cat ? 'selected' : ''}>${esc(CATEGORY_LABELS[c])}</option>`).join('')}</select>
+    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
+  d => {
+    const fields = { what: d.what.trim(), amount: toAgorot(d.amount), payer: d.payer, cat: d.cat };
+    if (editing) send({ type: 'updateExpense', id: x.id, fields });
+    else if (send({ type: 'addExpense', id: newId(), ...fields })) toast('ההוצאה נוספה להתחשבנות');
+  });
+}
+
+function eventDialog() {
+  const e = state.event;
+  openDialog(`<h3>פרטי הסופ״ש</h3>
+    <label>שם</label><input type="text" name="title" value="${esc(e.title)}" maxlength="120" required>
+    <label>תאריך</label><input type="date" name="date" value="${esc(e.date)}">
+    <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר / יישוב">
+    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
+  d => send({ type: 'setEvent', fields: { title: d.title.trim(), date: d.date, place: d.place.trim() } }));
+}
+
+function newEventDialog() {
+  const { transfers } = settle(state);
+  const open = transfers.filter(t => !state.paid.includes(t.key)).length;
+  openDialog(`<h3>סיום וסופ״ש חדש</h3>
+    ${open ? `<p style="color:var(--bad)">⚠️ יש עוד ${open} העברות שלא סומנו כשולמו.</p>` : ''}
+    <p class="small muted">הסופ״ש הנוכחי יישמר בהיסטוריה עם סכום ההוצאות. החברים, הרשימות והציוד נשארים; הסימונים, הקונים וההוצאות מתאפסים.</p>
+    <label>שם הסופ״ש החדש</label><input type="text" name="title" value="${esc(state.event.title)}" maxlength="120" required>
+    <label>תאריך</label><input type="date" name="date">
+    <label>מקום</label><input type="text" name="place" maxlength="120">
+    <div class="actions"><button class="btn primary">פתיחת סופ״ש חדש</button>${cancelBtn}</div>`,
+  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'meat'; render(); toast('סופ״ש חדש נפתח 🏕️'); } });
+}
+
+function pastDialog() {
+  openDialog(`<h3>סופ״שים קודמים</h3>
+    ${state.past.length ? `<ul class="rows">${state.past.map(p => `<li class="row"><div class="grow"><b>${esc(p.title)}</b><span class="sub">${esc([fmtDate(p.date), p.place].filter(Boolean).join(' · '))}</span></div>
+      <span class="amount">${shekels(p.total)}${p.people ? `<span class="sub">${shekels(Math.round(p.total / p.people))} לאדם</span>` : ''}</span></li>`).join('')}</ul>`
+      : '<p class="muted">עוד אין. כשסופ״ש נגמר, בחרו בתפריט "סיום וסופ״ש חדש".</p>'}
+    <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`);
+}
+
+function menuDialog() {
+  openDialog(`<h3>תפריט</h3>
+    <div class="menu-list">
+      <button class="btn" value="event">📅 פרטי הסופ״ש - שם, תאריך, מקום</button>
+      <button class="btn" value="people">👫 מי מגיע</button>
+      <button class="btn" value="share">🔗 שליחת קישור לקבוצה</button>
+      <button class="btn" value="new">🏁 סיום וסופ״ש חדש</button>
+      <button class="btn" value="past">🗂️ סופ״שים קודמים</button>
+      <button class="btn" value="logout">🚪 יציאה מהמכשיר הזה</button>
+    </div>
+    <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`,
+  (d, action) => {
+    if (action === 'event') eventDialog();
+    if (action === 'people') goPeople();
+    if (action === 'share') shareLink();
+    if (action === 'new') newEventDialog();
+    if (action === 'past') pastDialog();
+    if (action === 'logout' && confirm('לצאת? תצטרכו את הקוד כדי להיכנס שוב.')) logout();
+  });
+}
+
+// The code rides in the #fragment, which browsers never send to the server.
+async function shareLink() {
+  const url = `${location.origin}/${TEST ? '?test=1' : ''}#k=${encodeURIComponent(code)}`;
+  const text = `${state.event.title} - רשימות, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
+  if (navigator.share) {
+    try { await navigator.share({ title: state.event.title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  copyText(`${text}\n${url}`, 'הקישור הועתק');
+}
+
+function goPeople() {
+  if (tab !== 'people') backTab = tab;
+  tab = 'people';
+  render();
+  scrollTo(0, 0);
+}
+
+// ---------- events ----------
+
+$('menuBtn').onclick = menuDialog;
+$('peopleChip').onclick = goPeople;
+$('moneyChip').onclick = () => { tab = 'money'; local.set(TAB_KEY, tab); render(); };
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]');
+  if (!b) return;
+  tab = b.dataset.tab;
+  local.set(TAB_KEY, tab);
+  render();
+  scrollTo(0, 0);
+  refresh();
+});
+
+$('view').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.target;
+  const d = Object.fromEntries(new FormData(f));
+  const name = (d.name || '').trim();
+  if (!name) return;
+  let ok = false;
+  if (f.dataset.form === 'addItem') ok = send({ type: 'addItem', list: f.dataset.list, id: newId(), name, qty: d.qty });
+  if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', id: newId(), name, who: null });
+  if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, size: Number(d.size) });
+  if (ok) {
+    // send() already redrew the page, so clear the new copy of the form.
+    const fresh = $('view').querySelector(`form[data-form="${f.dataset.form}"]`);
+    fresh?.querySelectorAll('input').forEach(i => { i.value = ''; });
+    fresh?.querySelector('input')?.focus();
+  }
+});
+
+$('view').addEventListener('change', e => {
+  const el = e.target;
+  const { act, list, id } = el.dataset;
+  if (act === 'buyer') send({ type: 'setBuyer', list, person: el.value || null });
+  if (act === 'toggleItem') send({ type: 'updateItem', list, id, fields: { done: el.checked } });
+  if (act === 'toggleGear') send({ type: 'updateGear', id, fields: { done: el.checked } });
+  if (act === 'gearWho') send({ type: 'updateGear', id, fields: { who: el.value || null } });
+  if (act === 'paid') send({ type: 'setPaid', key: el.dataset.key, paid: el.checked });
+});
+
+$('view').addEventListener('click', e => {
+  const el = e.target.closest('button[data-act]');
+  if (!el) return;
+  const { act, list, id, cat } = el.dataset;
+  const p = id && person(id);
+  switch (act) {
+    case 'goPeople': return goPeople();
+    case 'back': tab = backTab; render(); return;
+    case 'editItem': return itemDialog(list, state.lists[list].find(i => i.id === id));
+    case 'removeItem': return send({ type: 'removeItem', list, id });
+    case 'copyList': {
+      const left = state.lists[list].filter(i => !i.done);
+      if (!left.length) return toast('הכל כבר נקנה 🎉');
+      return copyText(`🛒 ${LIST_LABELS[list]} - ${state.event.title}\n` + left.map(i => `• ${i.name}${i.qty ? ` (${i.qty})` : ''}${i.note ? ` - ${i.note}` : ''}`).join('\n'));
+    }
+    case 'editGear': {
+      const g = state.gear.find(x => x.id === id);
+      return openDialog(`<h3>עריכת ציוד</h3><label>מה</label><input type="text" name="name" value="${esc(g.name)}" maxlength="120" required>
+        <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
+      d => send({ type: 'updateGear', id, fields: { name: d.name.trim() } }));
+    }
+    case 'removeGear': return send({ type: 'removeGear', id });
+    case 'addExpense':
+      if (!state.people.length) return toast('הוסיפו קודם את החברים');
+      return expenseDialog(null, cat);
+    case 'editExpense': return expenseDialog(state.expenses.find(x => x.id === id));
+    case 'removeExpense': {
+      const x = state.expenses.find(v => v.id === id);
+      if (confirm(`למחוק את ההוצאה "${x.what}" (${shekels(x.amount)})?`)) send({ type: 'removeExpense', id });
+      return;
+    }
+    case 'copySettle': {
+      const { transfers } = settle(state);
+      const lines = transfers.filter(t => !state.paid.includes(t.key)).map(t => `• ${personName(t.from)} מעבירים ל${personName(t.to)}: ${shekels(t.amount)}`);
+      return copyText(`💸 התחשבנות - ${state.event.title}\nסה״כ הוצאות: ${shekels(total(state))}\n\n` +
+        (lines.length ? `העברות:\n${lines.join('\n')}` : 'הכל סגור 🎉'));
+    }
+    case 'editPerson':
+      return openDialog(`<h3>עריכת שם</h3><input type="text" name="name" value="${esc(p.name)}" maxlength="80" required>
+        <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
+      d => send({ type: 'updatePerson', id, fields: { name: d.name.trim() } }));
+    case 'toggleSize': return send({ type: 'updatePerson', id, fields: { size: p.size === 2 ? 1 : 2 } });
+    case 'toggleSkip': return send({ type: 'updatePerson', id, fields: { skip: p.skip.includes(list) ? p.skip.filter(c => c !== list) : [...p.skip, list] } });
+    case 'removePerson':
+      if (confirm(`להסיר את ${p.name} מהסופ״ש?`)) send({ type: 'removePerson', id });
+      return;
+  }
+});
+
+// ---------- start ----------
+
+const fromLink = new URLSearchParams(location.hash.slice(1)).get('k');
+if (fromLink) history.replaceState(null, '', location.pathname + location.search);
+const saved = fromLink || local.get(CODE_KEY);
+if (saved) login(saved); else showGate();
