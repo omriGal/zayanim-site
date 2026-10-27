@@ -6,3 +6,4 @@ node_modules/
 
 # Friends photos stay local until the repo is private (it is public on GitHub)
 photos/
+people.local.json
