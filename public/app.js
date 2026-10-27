@@ -76,11 +76,12 @@ const SAYS = {
   grill: 'בטוח שיש מספיק בשר?',
   eggs: 'יש מספיק ביצים?',
   'not-needed': 'את זה לא צריך',
-  cooling: 'דרוש קירור',
-  aperol: '', shades: '',
+  cooling: 'דרוש קירור?',
+  shades: 'בסדר יא אפס',
 };
-const BY_LIST = { alcohol: 'aperol', meat: 'grill', breakfast: 'eggs' };
-const ANYWHERE = ['shades', 'not-needed', 'cooling'];
+// Who greets you on each tab; on other tabs one of the rest.
+const BY_LIST = { meat: 'grill', alcohol: 'cooling', breakfast: 'eggs' };
+const ANYWHERE = ['not-needed', 'cooling'];
 const photos = {};
 let lastCameo = '';
 let cameoTimer;
@@ -100,26 +101,28 @@ const pickOne = list => {
   return options[Math.floor(Math.random() * options.length)];
 };
 
-function pickCameo(list, itemName = '', adding = false) {
-  if (/ביצ|שקשוק/.test(itemName) && photos.eggs) return 'eggs';
-  if (/מנגל|בשר|פחמ/.test(itemName) && photos.grill) return 'grill';
-  if (adding && Math.random() < 0.3 && photos['not-needed']) return 'not-needed';
+// Switching tabs: that tab's person, or now and then one of the others.
+function pickCameo(list) {
   const own = BY_LIST[list];
-  if (own && own !== lastCameo && Math.random() < 0.55 && photos[own]) return own;
+  if (own && own !== lastCameo && Math.random() < 0.6 && photos[own]) return own;
   return pickOne(ANYWHERE);
 }
 
+// Every save gets "בסדר יא אפס", unless the item calls for someone more specific.
 function cameoFor(op, before) {
-  if (op.type === 'updateGear' && op.fields?.skipped) return showCameo(photos['not-needed'] ? 'not-needed' : '');
-  const list = op.list || (tab === 'shop' ? shopList : '');
   const named = arr => arr?.find(x => x.id === op.id)?.name;
   const itemName = op.name || named(before.lists[op.list]) || named(before.gear) || '';
-  showCameo(pickCameo(list, itemName, /^add(Item|Gear)$/.test(op.type)));
+  const pick = op.type === 'updateGear' && op.fields?.skipped ? 'not-needed'
+    : /ביצ|שקשוק/.test(itemName) ? 'eggs'
+    : /מנגל|בשר|פחמ/.test(itemName) ? 'grill'
+    : 'shades';
+  showCameo(photos[pick] ? pick : '', true);
 }
 
-function showCameo(name) {
+// A save replaces whoever is on screen, so every save gets its answer.
+function showCameo(name, replace = false) {
   const el = $('cameo');
-  if (!name || el.classList.contains('on')) return;
+  if (!name || (el.classList.contains('on') && !replace)) return;
   lastCameo = name;
   $('cameoImg').src = photos[name];
   $('cameoSays').textContent = SAYS[name];
