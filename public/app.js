@@ -77,10 +77,10 @@ const SAYS = {
   eggs: 'יש מספיק ביצים?',
   'not-needed': 'את זה לא צריך',
   cooling: 'דרוש קירור',
-  aperol: '', shades: '', 'random-1': '', 'random-2': '', 'random-3': '', 'random-4': '',
+  aperol: '', shades: '',
 };
 const BY_LIST = { alcohol: 'aperol', meat: 'grill', breakfast: 'eggs' };
-const ANYWHERE = ['shades', 'not-needed', 'cooling', 'random-1', 'random-2', 'random-3', 'random-4'];
+const ANYWHERE = ['shades', 'not-needed', 'cooling'];
 const photos = {};
 let lastCameo = '';
 let cameoTimer;
