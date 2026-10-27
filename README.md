@@ -1,12 +1,17 @@
 # Zayanim weekend
 
-The group's twice-a-year zimmer weekend, on one page (Hebrew, phone-first):
+The group's twice-a-year zimmer weekend, on one page (Hebrew, phone-first), following how it is actually run:
 
-- **Meat, alcohol, general food** - one shopping list each, with the one person who buys it.
-- **Gear** - things brought from home, and who brings each.
-- **Settlement** - receipts go in as they're paid; the page splits them by headcount (a couple counts as two),
-  lets people opt out of a category (e.g. non-drinkers skip alcohol), and lists the fewest transfers that settle everyone.
-- **New weekend** - closes the current one into history and starts the next with the same friends and lists.
+1. **Place** - zimmer, dates (Thursday to Saturday), link, check-in.
+2. **Who's coming** - each family answers coming / not coming; adults, kids and vegetarians set the quantities.
+3. **Roles** - one family each for the grill, alcohol, general shopping and breakfast, each with its shopping list.
+4. **Extra gear** - kitchen, grill and fire, general; each item assigned to a family. Plus a personal packing list.
+5. **Settling up** - receipts go in as they're paid; split equally per family (with a weight, e.g. ½ for someone alone),
+   families can opt out of a category, and the page lists the fewest transfers that settle everyone.
+6. **Lessons** - after the weekend each item is marked missing / too much / just right, shown next to it next time.
+
+The starting lists (`public/template.js`) come from the Dec 2022 sheet and the Sep 2026 weekend chat.
+A new weekend keeps families, lists, gear and lessons, and resets answers, roles, ticks and expenses.
 
 Every edit is sent as a small operation that the server applies to the latest saved list, so two people editing
 at once never overwrite each other. Reading and editing both need the group code; the menu's share link carries
@@ -34,7 +39,7 @@ Set `SYNC_ENABLED=true` and `EDIT_CODE_SHA256` (SHA-256 of the group code, at le
 environment; keep the code itself out of Git.
 
 Production and each preview deploy get separate Blobs stores; `?test=1` uses a separate test store. The weekend is
-saved under `weekend-v3`; the earlier list under `current` is left untouched, and every previous version is kept under
+saved under `weekend-v4`; the earlier list under `current` is left untouched, and every previous version is kept under
 `history/`.
 
 Pushes to `main` publish the live site. On Netlify's credit-based Free plan each production deploy uses credits, so

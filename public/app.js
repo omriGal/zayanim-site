@@ -1,21 +1,23 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, applyOp, newId, settle, headcount, total, shekels } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, GEAR_GROUPS, WEIGHTS, COMING, LESSONS, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
+import { PERSONAL, TIPS } from './template.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
 const CODE_KEY = 'zayanim-code' + (TEST ? '-test' : '');
 const TAB_KEY = 'zayanim-tab';
+const SHOP_KEY = 'zayanim-shop';
+const PACKED_KEY = 'zayanim-packed';
 const POLL_MS = 20_000;
 
 const icon = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 const TABS = [
-  { id: 'meat', label: 'מנגל', icon: icon('<path d="M12 3c1.2 3 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-2.1 1-3.4 2.2-4.4 0 2 .9 3.1 2.1 3.3-.4-3 .1-5.2.2-7.5z"/><path d="M5 21h14M8 18l-1.5 3M16 18l1.5 3"/>') },
-  { id: 'alcohol', label: 'אלכוהול', icon: icon('<path d="M7.5 3h9l-.8 6.5a3.7 3.7 0 0 1-7.4 0z"/><path d="M8 7h8M12 13.2V20M8.5 20.5h7"/>') },
-  { id: 'general', label: 'כללי', icon: icon('<path d="M3 9.5h18l-2 10.5H5z"/><path d="M8 9.5 11 4M16 9.5 13 4M9 13.5v3M15 13.5v3M12 13.5v3"/>') },
+  { id: 'home', label: 'מסלול', icon: icon('<path d="M12 3c1.2 3 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-2.1 1-3.4 2.2-4.4 0 2 .9 3.1 2.1 3.3-.4-3 .1-5.2.2-7.5z"/><path d="M5 21h14M8 18l-1.5 3M16 18l1.5 3"/>') },
+  { id: 'shop', label: 'תפקידים', icon: icon('<path d="M3 9.5h18l-2 10.5H5z"/><path d="M8 9.5 11 4M16 9.5 13 4M9 13.5v3M15 13.5v3M12 13.5v3"/>') },
   { id: 'gear', label: 'ציוד', icon: icon('<path d="M12 4 2.5 20h19z"/><path d="M12 4v16M8.5 20 12 13.5 15.5 20"/>') },
   { id: 'money', label: 'חשבון', icon: icon('<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 11.5h6M9 15h3"/>') },
+  { id: 'people', label: 'משפחות', icon: icon('<circle cx="8.5" cy="8" r="3"/><circle cx="16.5" cy="9" r="2.4"/><path d="M3 19.5c.6-3.4 2.8-5.2 5.5-5.2s4.9 1.8 5.5 5.2M14 15c.8-.5 1.6-.7 2.5-.7 2.2 0 3.9 1.5 4.5 4.2"/>') },
 ];
-// "Hi, I'm buying ___" on each list's name tag.
-const BUY_LABELS = { meat: 'את הבשר', alcohol: 'את האלכוהול', general: 'את האוכל הכללי' };
+const BUY_LABELS = { meat: 'את המנגל', alcohol: 'את האלכוהול', general: 'את הקניות הכלליות', breakfast: 'את ארוחת הבוקר' };
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -32,8 +34,9 @@ let state = null;      // server state + edits not yet confirmed
 let queue = [];        // edits waiting to be sent
 let sending = false;
 let offline = false;
-let tab = local.get(TAB_KEY) || 'meat';
-let backTab = 'meat';
+let tab = TABS.some(t => t.id === local.get(TAB_KEY)) ? local.get(TAB_KEY) : 'home';
+let shopList = LISTS.includes(local.get(SHOP_KEY)) ? local.get(SHOP_KEY) : 'meat';
+let lessonMode = false; // after the weekend: mark what was missing or too much
 
 // ---------- server ----------
 
@@ -79,7 +82,7 @@ const SAYS = {
   cooling: 'דרוש קירור',
   aperol: '', shades: '', 'random-1': '', 'random-2': '', 'random-3': '', 'random-4': '',
 };
-const BY_TAB = { alcohol: 'aperol', meat: 'grill', general: 'eggs' };
+const BY_LIST = { alcohol: 'aperol', meat: 'grill', breakfast: 'eggs' };
 const ANYWHERE = ['shades', 'not-needed', 'cooling', 'random-1', 'random-2', 'random-3', 'random-4'];
 const photos = {};
 let lastCameo = '';
@@ -101,17 +104,19 @@ const pickOne = list => {
 };
 
 function pickCameo(list, itemName = '', adding = false) {
-  if (/ביצ/.test(itemName) && photos.eggs) return 'eggs';
+  if (/ביצ|שקשוק/.test(itemName) && photos.eggs) return 'eggs';
+  if (/מנגל|בשר|פחמ/.test(itemName) && photos.grill) return 'grill';
   if (adding && Math.random() < 0.3 && photos['not-needed']) return 'not-needed';
-  const own = BY_TAB[list];
+  const own = BY_LIST[list];
   if (own && own !== lastCameo && Math.random() < 0.55 && photos[own]) return own;
   return pickOne(ANYWHERE);
 }
 
 function cameoFor(op, before) {
-  const list = op.list || (LISTS.includes(tab) ? tab : '');
-  const itemName = op.name || (op.type === 'updateItem' ? before.lists[op.list]?.find(i => i.id === op.id)?.name : '') || '';
-  showCameo(pickCameo(list, itemName, op.type === 'addItem' || op.type === 'addGear'));
+  const list = op.list || (tab === 'shop' ? shopList : '');
+  const named = arr => arr?.find(x => x.id === op.id)?.name;
+  const itemName = op.name || named(before.lists[op.list]) || named(before.gear) || '';
+  showCameo(pickCameo(list, itemName, /^add(Item|Gear)$/.test(op.type)));
 }
 
 function showCameo(name) {
@@ -228,21 +233,33 @@ $('gateForm').addEventListener('submit', e => {
 
 const person = id => state.people.find(p => p.id === id);
 const personName = id => person(id)?.name ?? '—';
+// Families who aren't coming can't be picked for jobs (unless they already hold one).
 const options = (selected, empty) =>
   `<option value="">${esc(empty)}</option>` +
-  state.people.map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
-const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('he-IL', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  state.people.filter(p => p.coming !== 'no' || p.id === selected)
+    .map(p => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+const dayDate = (base, offset) => { const d = new Date(base + 'T12:00'); d.setDate(d.getDate() + offset); return d; };
+const short = d => d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
+const weightLabel = w => ({ 0.5: '½', 1: '1', 1.5: '1½', 2: '2' })[w];
+
+function eventWhen() {
+  const e = state.event;
+  if (!e.date) return 'תאריך? בתפריט';
+  const start = dayDate(e.date, 0), end = dayDate(e.date, 2);
+  const days = Math.ceil((start - new Date()) / 86_400_000);
+  const left = days > 1 ? ` · עוד ${days} ימים` : days === 1 ? ' · מחר!' : days === 0 ? ' · היום!' : '';
+  return `חמישי-שבת ${start.getDate()}-${short(end)}.${String(end.getFullYear()).slice(2)}${left}`;
+}
 
 function groupSummary() {
-  const couples = state.people.filter(p => p.size === 2).length;
-  const singles = state.people.length - couples;
-  if (!state.people.length) return '+ הוסיפו את החברים';
-  const parts = [];
-  if (couples) parts.push(couples === 1 ? 'זוג אחד' : `${couples} זוגות`);
-  if (singles) parts.push(singles === 1 ? 'יחיד אחד' : `${singles} יחידים`);
-  return `${parts.join(' + ')} · ${headcount(state)} אנשים`;
+  if (!state.people.length) return '+ הוסיפו משפחות';
+  const yes = coming(state).length;
+  const open = state.people.filter(p => p.coming === null).length;
+  return `${familiesComing(yes)}${open ? ` · ${open} עוד לא ענו` : ''}`;
 }
+const familiesComing = n => n === 1 ? 'משפחה אחת מגיעה' : `${n} משפחות מגיעות`;
 
 let toastTimer;
 function toast(msg) {
@@ -265,6 +282,10 @@ function updateSync() {
   else el.textContent = 'הכל שמור · מתעדכן אצל כולם';
 }
 
+function packed() {
+  try { return new Set(JSON.parse(local.get(PACKED_KEY + ':' + state.event.id) || '[]')); } catch { return new Set(); }
+}
+
 // ---------- render ----------
 
 let renderLater = false;
@@ -283,19 +304,18 @@ function render() {
   const kept = [...$('view').querySelectorAll('input[data-keep]')].map(i => [i.id, i.value]);
   const focused = active?.id;
 
-  $('evTitle').textContent = state.event.title;
-  $('evMeta').textContent = [fmtDate(state.event.date), state.event.place].filter(Boolean).join(' · ') || 'תאריך ומקום? בתפריט';
+  const e = state.event;
+  $('evTitle').textContent = e.title;
+  $('evMeta').textContent = eventWhen();
+  $('evPlace').innerHTML = e.place ? (e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.place)} ↗</a>` : esc(e.place)) + (e.checkin ? ` · ${esc(e.checkin)}` : '') : '';
   $('peopleChip').textContent = groupSummary();
   $('moneyChip').textContent = 'בקופה: ' + shekels(total(state));
-  document.title = state.event.title;
+  document.title = e.title;
 
   $('tabs').innerHTML = TABS.map(t =>
     `<button data-tab="${t.id}" class="${tab === t.id ? 'on' : ''}">${t.icon}${t.label}</button>`).join('');
 
-  $('view').innerHTML = LISTS.includes(tab) ? listView(tab)
-    : tab === 'gear' ? gearView()
-    : tab === 'money' ? moneyView()
-    : peopleView();
+  $('view').innerHTML = { home: homeView, shop: shopView, gear: gearView, money: moneyView, people: peopleView }[tab]();
 
   for (const [id, value] of kept) { const el = $(id); if (el) el.value = value; }
   if (focused && $(focused) && $('view').contains($(focused))) $(focused).focus();
@@ -304,22 +324,74 @@ function render() {
 
 function noPeopleHint() {
   return state.people.length ? '' :
-    `<section class="card"><h2>קודם כל, מי מגיע?</h2><p class="muted small">מוסיפים את הזוגות, ואז בוחרים מי קונה מה ומתחשבנים בסוף.</p><button class="btn fire" data-act="goPeople">הוספת החברים</button></section>`;
+    `<section class="card"><h2>קודם כל, מי מגיע?</h2><p class="muted small">מוסיפים את המשפחות, ואז מחלקים ארוחות, קניות וציוד, ומתחשבנים בסוף.</p><button class="btn fire" data-act="goPeople">הוספת משפחות</button></section>`;
 }
 
-function listView(k) {
+// The weekend's steps, the way the group runs it: place, who's coming, the four jobs,
+// extra gear, settling up, and what to learn for next time.
+function homeView() {
+  const e = state.event;
+  const yes = coming(state).length;
+  const noAnswer = state.people.filter(p => p.coming === null);
+  const rolesOpen = LISTS.filter(k => !state.buyers[k]).length;
+  const gearOpen = state.gear.filter(g => !g.who).length;
+  const sum = total(state);
+  const { transfers } = settle(state);
+  const openPay = transfers.filter(t => !state.paid.includes(t.key)).length;
+  const items = LISTS.flatMap(k => state.lists[k]);
+  const lessons = items.filter(i => i.lesson).length;
+  const step = (n, done, title, body, action = '') => `
+    <section class="card stepcard ${done ? 'done' : ''}">
+      <div class="step-n">${done ? '✓' : n}</div>
+      <div class="step-body"><h2>${title}</h2>${body}${action}</div>
+    </section>`;
+  return `
+  ${step(1, e.place && e.date, 'קובעים מקום',
+    `<p>${e.place ? `<b>${esc(e.place)}</b>` : 'עוד לא נקבע'}${e.date ? ` · ${esc(eventWhen())}` : ''}${e.checkin ? ` · ${esc(e.checkin)}` : ''}</p>`,
+    `<button class="btn sm" data-act="editEvent">${e.place ? 'עריכה' : 'קביעת מקום ותאריך'}</button>`)}
+  ${step(2, state.people.length && !noAnswer.length, 'מי מגיע',
+    state.people.length
+      ? `<p><b>${familiesComing(yes)}</b>${noAnswer.length ? ` · <b>${noAnswer.length}</b> עוד לא ענו` : ''}${yes ? ` · ${adults(state)} מבוגרים${kids(state) ? `, ${kids(state)} ילדים` : ''}` : ''}</p>
+         ${noAnswer.length ? `<p class="small muted">מחכים ל: ${noAnswer.map(p => esc(p.name)).join(', ')}</p>` : ''}`
+      : '<p>עוד אין משפחות ברשימה</p>',
+    `<button class="btn sm" data-act="goPeople">${state.people.length ? 'עדכון מי מגיע' : 'הוספת משפחות'}</button>`)}
+  ${step(3, !rolesOpen, 'מחלקים תפקידים',
+    `<div class="roles">${LISTS.map((k, i) => `
+      <label class="role"><span><i>${i + 1}</i>${esc(LIST_LABELS[k])}</span>
+        <select data-act="buyer" data-list="${k}" class="${state.buyers[k] ? '' : 'unset'}">${options(state.buyers[k], 'מי לוקח?')}</select></label>`).join('')}</div>`)}
+  ${step(4, !gearOpen, 'ציוד נוסף',
+    `<p>${gearOpen ? `ל-<b>${gearOpen}</b> פריטים מתוך ${state.gear.length} אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</p>`,
+    `<button class="btn sm" data-act="goTab" data-tab="gear">חלוקת ציוד</button>`)}
+  ${step(5, sum && !openPay, 'מתחשבנים',
+    `<p>${sum ? `שולמו <b>${shekels(sum)}</b> · ${openPay ? `${openPay} העברות פתוחות` : 'הכל סגור'}` : 'בסוף כל אחד כותב כמה שילם'}</p>`,
+    `<button class="btn sm" data-act="goTab" data-tab="money">${sum ? 'להתחשבנות' : 'הוספת קבלה'}</button>`)}
+  ${step(6, false, 'לומדים לפעם הבאה',
+    `<p>${lessons ? `<b>${lessons}</b> פריטים מסומנים עם לקח` : 'אחרי הסופ״ש: מסמנים מה היה חסר ומה היה יותר מדי'}</p>
+     <details class="tips"><summary>מהפעם הקודמת</summary><ul>${TIPS.map(t => `<li>${esc(t)}</li>`).join('')}</ul></details>
+     ${e.notes ? `<p class="small"><b>הערות:</b> ${esc(e.notes)}</p>` : ''}`,
+    `<button class="btn sm" data-act="lessons">סימון חסר / מיותר</button>`)}`;
+}
+
+function shopView() {
+  const k = shopList;
   const items = state.lists[k];
   const buyer = state.buyers[k];
   const done = items.filter(i => i.done).length;
   const exp = state.expenses.filter(x => x.cat === k);
   const spent = exp.reduce((n, x) => n + x.amount, 0);
   const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
+  const a = adults(state), c = kids(state), v = veg(state);
   return `
   ${noPeopleHint()}
+  <nav class="cats">${LISTS.map(l => {
+    const left = state.lists[l].filter(i => !i.done).length;
+    return `<button data-act="shopList" data-list="${l}" class="${l === k ? 'on' : ''}">${esc(LIST_LABELS[l])}<i>${left}</i></button>`;
+  }).join('')}</nav>
+  ${state.people.length ? `<p class="key">מפתח כמויות: <b>${a}</b> מבוגרים${c ? ` · <b>${c}</b> ילדים` : ''}${v ? ` · <b>${v}</b> צמחונים` : ''}</p>` : ''}
   <section class="nametag">
     <div class="nametag-top"><span>מי קונה</span><b>${esc(BUY_LABELS[k])}</b></div>
     <div class="nametag-body">
-      <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}" aria-label="מי קונה ${esc(LIST_LABELS[k])}">${options(buyer, 'מי? בחרו שם')}</select>
+      <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}" aria-label="מי קונה ${esc(LIST_LABELS[k])}">${options(buyer, 'מי? בחרו משפחה')}</select>
       <div class="spent">
         <span>שולם עד עכשיו <strong class="num">${shekels(spent)}</strong></span>
         <button class="btn fire sm" data-act="addExpense" data-cat="${k}">+ קבלה</button>
@@ -329,6 +401,8 @@ function listView(k) {
   </section>
   <section class="card">
     <h2>מה קונים <span class="tally">${done} מתוך ${items.length}</span></h2>
+    <button class="btn sm lesson-toggle ${lessonMode ? 'on' : ''}" data-act="lessonMode">${lessonMode ? '✓ מסמנים לקחים - סיום' : 'אחרי הסופ״ש: מה היה חסר / מיותר?'}</button>
+    ${lessonMode ? `<p class="small muted">לכל פריט: היה חסר, היה יותר מדי, או בדיוק. זה יופיע ליד הפריט בסופ״ש הבא.</p>` : ''}
     <form class="quick" data-form="addItem" data-list="${k}">
       <input type="text" id="q-name-${k}" data-keep name="name" placeholder="מה עוד צריך?" maxlength="120" required autocomplete="off">
       <input type="text" id="q-qty-${k}" data-keep name="qty" placeholder="כמה" maxlength="60" autocomplete="off">
@@ -337,7 +411,11 @@ function listView(k) {
     ${items.length ? `<ul class="rows">${sorted.map(it => `
       <li class="row ${it.done ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
-        <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}<span class="sub">${esc([it.qty, it.note].filter(Boolean).join(' · '))}</span></button></div>
+        <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}
+          <span class="sub">${esc([it.qty, it.who && 'מביאים: ' + personName(it.who), it.note].filter(Boolean).join(' · '))}</span>
+          ${it.lesson && !lessonMode ? `<span class="lesson">בפעם שעברה: ${esc(it.lesson)}</span>` : ''}</button>
+          ${lessonMode ? `<div class="lesson-pills">${Object.entries(LESSONS).map(([v, label]) =>
+            `<button class="pill ${it.lesson === label ? 'on' : ''}" data-act="lesson" data-list="${k}" data-id="${it.id}" data-v="${v}">${label}</button>`).join('')}</div>` : ''}</div>
         <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
       </li>`).join('')}</ul>` : '<div class="empty">ריק פה. מה צריך?</div>'}
     ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:14px">העתקת מה שחסר לוואטסאפ</button>` : ''}
@@ -346,29 +424,41 @@ function listView(k) {
 
 function gearView() {
   const missing = state.gear.filter(g => !g.who).length;
+  const mine = packed();
   return `
   ${noPeopleHint()}
+  <p class="open-note">${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</p>
+  ${Object.entries(GEAR_GROUPS).map(([group, label]) => {
+    const items = state.gear.filter(g => g.group === group);
+    return `<section class="card">
+      <h2>${esc(label)} <small>${items.filter(g => g.who).length} מתוך ${items.length}</small></h2>
+      ${items.length ? `<ul class="rows">${items.map(g => `
+        <li class="row ${g.done ? 'done' : ''}">
+          <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="נארז">
+          <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}${g.note ? `<span class="lesson">${esc(g.note)}</span>` : ''}</button></div>
+          <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
+          <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
+        </li>`).join('')}</ul>` : ''}
+      <form class="quick" data-form="addGear" data-group="${group}" style="grid-template-columns:1fr 46px">
+        <input type="text" id="q-gear-${group}" data-keep name="name" placeholder="עוד משהו…" maxlength="120" required autocomplete="off">
+        <button class="btn" aria-label="הוספה">+</button>
+      </form>
+    </section>`;
+  }).join('')}
   <section class="card">
-    <h2>ציוד מהבית <small>${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</small></h2>
-    <p class="muted small" style="margin-top:0">דברים שמביאים, לא קונים. בחרו ליד כל פריט מי מביא אותו, וסמנו ✓ כשהוא כבר באוטו.</p>
-    <form class="quick" data-form="addGear" style="grid-template-columns:1fr 44px">
-      <input type="text" id="q-gear" data-keep name="name" placeholder="עוד משהו להביא…" maxlength="120" required autocomplete="off">
-      <button class="btn primary" aria-label="הוספה">+</button>
-    </form>
-    ${state.gear.length ? `<ul class="rows">${state.gear.map(g => `
-      <li class="row ${g.done ? 'done' : ''}">
-        <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="נארז">
-        <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
-        <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
-        <button class="x" data-act="removeGear" data-id="${g.id}" aria-label="מחיקה">×</button>
-      </li>`).join('')}</ul>` : '<div class="empty">אין ציוד ברשימה.</div>'}
+    <h2>כל משפחה לעצמה <small>הסימונים רק אצלך</small></h2>
+    <ul class="rows">${PERSONAL.map((p, i) => `
+      <li class="row ${mine.has(i) ? 'done' : ''}">
+        <input type="checkbox" class="check" data-act="packed" data-i="${i}" ${mine.has(i) ? 'checked' : ''} aria-label="ארזתי">
+        <div class="grow"><span class="title">${esc(p)}</span></div>
+      </li>`).join('')}</ul>
   </section>`;
 }
 
 function moneyView() {
   if (!state.people.length) return noPeopleHint();
   const sum = total(state);
-  const hc = headcount(state);
+  const units = payers(state).reduce((n, p) => n + p.weight, 0);
   const { share, balance, transfers } = settle(state);
   const skips = LISTS.map(k => [k, state.people.filter(p => p.skip.includes(k))]).filter(([, ps]) => ps.length);
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
@@ -383,8 +473,8 @@ function moneyView() {
       </div>`).join('') : '<div class="empty">עוד אין קבלות</div>'}
     <div class="r-total"><span>סה״כ</span><b>${shekels(sum)}</b></div>
     <div class="r-split">
-      <div><b>${hc ? shekels(Math.round(sum / hc)) : '—'}</b><span>${skips.length ? 'ממוצע לאדם' : 'לאדם'}</span></div>
-      <div><b>${hc ? shekels(Math.round(sum * 2 / hc)) : '—'}</b><span>${skips.length ? 'ממוצע לזוג' : 'לזוג'}</span></div>
+      <div><b>${units ? shekels(Math.round(sum / units)) : '—'}</b><span>${skips.length ? 'בממוצע למשפחה' : 'לכל משפחה'}</span></div>
+      <div><b>${payers(state).length}</b><span>משפחות</span></div>
     </div>
     ${skips.length ? `<p class="r-note">${skips.map(([k, ps]) => `בלי ${esc(LIST_LABELS[k])}: ${ps.map(p => esc(p.name)).join(', ')}`).join('<br>')}</p>` : ''}
     <button class="btn fire block" data-act="addExpense" data-cat="">+ הוספת קבלה</button>
@@ -405,8 +495,8 @@ function moneyView() {
   </section>
 
   <section class="card">
-    <h2>מאזן לכל זוג</h2>
-    <ul class="rows">${state.people.map(p => {
+    <h2>מאזן לכל משפחה</h2>
+    <ul class="rows">${payers(state).map(p => {
       const paidBy = state.expenses.filter(x => x.payer === p.id).reduce((n, x) => n + x.amount, 0);
       const b = balance[p.id];
       return `<li class="row"><div class="grow"><b>${esc(p.name)}</b><span class="sub">שילמו ${shekels(paidBy)} · החלק שלהם ${shekels(share[p.id])}</span></div>
@@ -415,29 +505,38 @@ function moneyView() {
   </section>` : ''}`;
 }
 
+const stepper = (p, field, label, min, max) => `
+  <span class="step"><button data-act="step" data-id="${p.id}" data-field="${field}" data-d="-1" ${p[field] <= min ? 'disabled' : ''} aria-label="פחות ${label}">−</button><b>${p[field]}</b><button data-act="step" data-id="${p.id}" data-field="${field}" data-d="1" ${p[field] >= max ? 'disabled' : ''} aria-label="עוד ${label}">+</button>${label}</span>`;
+
 function peopleView() {
+  const v = veg(state);
   return `
   <section class="card">
-    <h2>מי מגיע <small>${esc(groupSummary())}</small></h2>
-    <form class="quick" data-form="addPerson" style="grid-template-columns:1fr 96px 44px">
-      <input type="text" id="q-person" data-keep name="name" placeholder="למשל: דני ומיכל" maxlength="80" required autocomplete="off">
-      <select name="size" aria-label="זוג או יחיד"><option value="2">זוג</option><option value="1">יחיד</option></select>
-      <button class="btn primary" aria-label="הוספה">+</button>
+    <h2>מי מגיע <small>${esc(groupSummary())}${v ? ` · ${v} צמחונים` : ''}</small></h2>
+    <form class="quick" data-form="addPerson" style="grid-template-columns:1fr 92px 46px">
+      <input type="text" id="q-person" data-keep name="name" placeholder="למשל: דני ומיכל כהן" maxlength="80" required autocomplete="off">
+      <select name="adults" aria-label="מבוגרים"><option value="2">זוג</option><option value="1">לבד</option></select>
+      <button class="btn" aria-label="הוספה">+</button>
     </form>
-    <p class="muted small">ההוצאות מתחלקות לפי מספר אנשים: זוג משלם כפול מיחיד. מי שלא שותה או לא אוכל בשר - לחצו על הקטגוריה כדי להוציא אותו ממנה.</p>
+    <p class="muted small">ההוצאות מתחלקות שווה בשווה בין המשפחות שמגיעות. "חלק" קובע כמה משפחה משלמת ביחס לאחרות, למשל ½ למי שמגיע לבד. מי שלא שותה או לא אוכל בשר - לחצו על הקטגוריה כדי להוציא אותו ממנה.</p>
     ${state.people.length ? state.people.map(p => `
-      <div class="person">
+      <div class="person ${p.coming === 'no' ? 'not-coming' : ''}">
         <div class="person-head">
           <button class="title" data-act="editPerson" data-id="${p.id}">${esc(p.name)}</button>
-          <button class="pill" data-act="toggleSize" data-id="${p.id}">${p.size === 2 ? 'זוג' : 'יחיד'}</button>
           <button class="x" data-act="removePerson" data-id="${p.id}" aria-label="מחיקה">×</button>
+        </div>
+        <div class="rsvp">${Object.entries(COMING).map(([v, label]) =>
+          `<button class="pill ${p.coming === v ? (v === 'yes' ? 'on' : 'off') : ''}" data-act="coming" data-id="${p.id}" data-v="${v}">${label}</button>`).join('')}
+          ${p.coming === null ? '<span class="small" style="color:var(--fire)">עוד לא ענו</span>' : ''}</div>
+        ${p.coming === 'no' ? '' : `<div class="steps">${stepper(p, 'adults', 'מבוגרים', 1, 4)}${stepper(p, 'kids', 'ילדים', 0, 10)}${stepper(p, 'veg', 'צמחונים', 0, p.adults + p.kids)}</div>
+        <div class="toggles">חלק בחשבון:
+          ${WEIGHTS.map(w => `<button class="pill ${p.weight === w ? 'on' : ''}" data-act="weight" data-id="${p.id}" data-w="${w}">${weightLabel(w)}</button>`).join('')}
         </div>
         <div class="toggles">משתתפים ב:
           ${LISTS.map(k => `<button class="pill ${p.skip.includes(k) ? 'off' : 'on'}" data-act="toggleSkip" data-id="${p.id}" data-list="${k}">${esc(LIST_LABELS[k])}</button>`).join('')}
-        </div>
+        </div>`}
       </div>`).join('') : '<div class="empty">עוד אין אף אחד ברשימה.</div>'}
-  </section>
-  <button class="btn block" data-act="back">→ חזרה</button>`;
+  </section>`;
 }
 
 // ---------- dialogs ----------
@@ -456,16 +555,19 @@ $('dlgForm').addEventListener('submit', e => {
   if (action !== 'cancel') dlgHandler?.(data, action);
 });
 const cancelBtn = '<button class="btn" value="cancel" formnovalidate>ביטול</button>';
+const deleteBtn = '<button class="btn danger" value="delete" formnovalidate>מחיקה</button>';
 
 function itemDialog(k, it) {
   openDialog(`<h3>עריכת פריט</h3>
     <label>מה</label><input type="text" name="name" value="${esc(it.name)}" maxlength="120" required>
     <label>כמות</label><input type="text" name="qty" value="${esc(it.qty)}" maxlength="60">
-    <label>הערה</label><input type="text" name="note" value="${esc(it.note)}" maxlength="300" placeholder="מותג, איפה קונים…">
-    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}<button class="btn danger" value="delete" formnovalidate>מחיקה</button></div>`,
+    <label>מי מביא (אם לא הקונה)</label><select name="who">${options(it.who, 'הקונה של הרשימה')}</select>
+    <label>הערה</label><input type="text" name="note" value="${esc(it.note)}" maxlength="300" placeholder="מותג, איפה קונים, לקנות ביום…">
+    <label>לקח לפעם הבאה</label><input type="text" name="lesson" value="${esc(it.lesson)}" maxlength="300" placeholder="נשאר הרבה / היה חסר…">
+    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}${deleteBtn}</div>`,
   (d, action) => {
     if (action === 'delete') send({ type: 'removeItem', list: k, id: it.id });
-    else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), note: d.note.trim() } });
+    else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), who: d.who || null, note: d.note.trim(), lesson: d.lesson.trim() } });
   });
 }
 
@@ -489,10 +591,17 @@ function eventDialog() {
   const e = state.event;
   openDialog(`<h3>פרטי הסופ״ש</h3>
     <label>שם</label><input type="text" name="title" value="${esc(e.title)}" maxlength="120" required>
-    <label>תאריך</label><input type="date" name="date" value="${esc(e.date)}">
-    <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר / יישוב">
+    <label>יום חמישי של הסופ״ש</label><input type="date" name="date" value="${esc(e.date)}">
+    <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר">
+    <label>קישור לצימר</label><input type="text" name="link" value="${esc(e.link)}" maxlength="300" placeholder="https://…" inputmode="url">
+    <label>צ׳ק אין</label><input type="text" name="checkin" value="${esc(e.checkin)}" maxlength="120" placeholder="למשל: צ׳ק אין 14:30">
+    <label>הערות לכולם</label><input type="text" name="notes" value="${esc(e.notes)}" maxlength="2000" placeholder="חניה, בריכה, מה יש במטבח…">
     <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
-  d => send({ type: 'setEvent', fields: { title: d.title.trim(), date: d.date, place: d.place.trim() } }));
+  d => {
+    const link = d.link.trim();
+    if (link && !link.startsWith('https://')) return toast('הקישור צריך להתחיל ב-https://');
+    send({ type: 'setEvent', fields: { title: d.title.trim(), date: d.date, place: d.place.trim(), link, checkin: d.checkin.trim(), notes: d.notes.trim() } });
+  });
 }
 
 function newEventDialog() {
@@ -500,18 +609,18 @@ function newEventDialog() {
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
   openDialog(`<h3>סיום וסופ״ש חדש</h3>
     ${open ? `<p style="color:var(--red)">שימו לב: יש עוד ${open} העברות שלא סומנו כשולמו.</p>` : ''}
-    <p class="small muted">הסופ״ש הנוכחי יישמר בהיסטוריה עם סכום ההוצאות. החברים, הרשימות והציוד נשארים; הסימונים, הקונים וההוצאות מתאפסים.</p>
+    <p class="small muted">הסופ״ש הנוכחי יישמר בהיסטוריה עם סכום ההוצאות. המשפחות, הרשימות, הציוד והלקחים נשארים; מי מגיע, התפקידים, הסימונים וההוצאות מתאפסים.</p>
     <label>שם הסופ״ש החדש</label><input type="text" name="title" value="${esc(state.event.title)}" maxlength="120" required>
-    <label>תאריך</label><input type="date" name="date">
+    <label>יום חמישי</label><input type="date" name="date">
     <label>מקום</label><input type="text" name="place" maxlength="120">
     <div class="actions"><button class="btn primary">פתיחת סופ״ש חדש</button>${cancelBtn}</div>`,
-  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'meat'; render(); toast('סופ״ש חדש נפתח'); } });
+  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'home'; render(); toast('סופ״ש חדש נפתח'); } });
 }
 
 function pastDialog() {
   openDialog(`<h3>סופ״שים קודמים</h3>
     ${state.past.length ? `<ul class="rows">${state.past.map(p => `<li class="row"><div class="grow"><b>${esc(p.title)}</b><span class="sub">${esc([fmtDate(p.date), p.place].filter(Boolean).join(' · '))}</span></div>
-      <span class="amount">${shekels(p.total)}${p.people ? `<span class="sub">${shekels(Math.round(p.total / p.people))} לאדם</span>` : ''}</span></li>`).join('')}</ul>`
+      <span class="amount">${shekels(p.total)}${p.families ? `<span class="sub">${shekels(Math.round(p.total / p.families))} למשפחה</span>` : ''}</span></li>`).join('')}</ul>`
       : '<p class="muted">עוד אין. כשסופ״ש נגמר, בחרו בתפריט "סיום וסופ״ש חדש".</p>'}
     <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`);
 }
@@ -519,8 +628,7 @@ function pastDialog() {
 function menuDialog() {
   openDialog(`<h3>תפריט</h3>
     <div class="menu-list">
-      <button class="btn" value="event">פרטי הסופ״ש: שם, תאריך, מקום</button>
-      <button class="btn" value="people">מי מגיע</button>
+      <button class="btn" value="event">פרטי הסופ״ש: תאריך, מקום, צ׳ק אין</button>
       <button class="btn" value="share">שליחת קישור לקבוצה</button>
       <button class="btn" value="new">סיום וסופ״ש חדש</button>
       <button class="btn" value="past">סופ״שים קודמים</button>
@@ -529,7 +637,6 @@ function menuDialog() {
     <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`,
   (d, action) => {
     if (action === 'event') eventDialog();
-    if (action === 'people') goPeople();
     if (action === 'share') shareLink();
     if (action === 'new') newEventDialog();
     if (action === 'past') pastDialog();
@@ -540,16 +647,16 @@ function menuDialog() {
 // The code rides in the #fragment, which browsers never send to the server.
 async function shareLink() {
   const url = `${location.origin}/${TEST ? '?test=1' : ''}#k=${encodeURIComponent(code)}`;
-  const text = `${state.event.title} - רשימות, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
+  const text = `${state.event.title} - מי מגיע, תפקידים, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
   if (navigator.share) {
     try { await navigator.share({ title: state.event.title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   copyText(`${text}\n${url}`, 'הקישור הועתק');
 }
 
-function goPeople() {
-  if (tab !== 'people') backTab = tab;
-  tab = 'people';
+function goTab(next) {
+  tab = next;
+  local.set(TAB_KEY, tab);
   render();
   scrollTo(0, 0);
 }
@@ -557,17 +664,14 @@ function goPeople() {
 // ---------- events ----------
 
 $('menuBtn').onclick = menuDialog;
-$('peopleChip').onclick = goPeople;
-$('moneyChip').onclick = () => { tab = 'money'; local.set(TAB_KEY, tab); render(); };
+$('peopleChip').onclick = () => goTab('people');
+$('moneyChip').onclick = () => goTab('money');
 $('tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]');
   if (!b) return;
-  tab = b.dataset.tab;
-  local.set(TAB_KEY, tab);
-  render();
-  scrollTo(0, 0);
+  goTab(b.dataset.tab);
   refresh();
-  showCameo(pickCameo(tab));
+  showCameo(pickCameo(tab === 'shop' ? shopList : ''));
 });
 
 $('view').addEventListener('submit', e => {
@@ -578,11 +682,12 @@ $('view').addEventListener('submit', e => {
   if (!name) return;
   let ok = false;
   if (f.dataset.form === 'addItem') ok = send({ type: 'addItem', list: f.dataset.list, id: newId(), name, qty: d.qty });
-  if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', id: newId(), name, who: null });
-  if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, size: Number(d.size) });
+  if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', group: f.dataset.group, id: newId(), name, who: null });
+  if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, adults: Number(d.adults), weight: 1 });
   if (ok) {
     // send() already redrew the page, so clear the new copy of the form.
-    const fresh = $('view').querySelector(`form[data-form="${f.dataset.form}"]`);
+    const sel = `form[data-form="${f.dataset.form}"]` + ['list', 'group'].map(k => f.dataset[k] ? `[data-${k}="${f.dataset[k]}"]` : '').join('');
+    const fresh = $('view').querySelector(sel);
     fresh?.querySelectorAll('input').forEach(i => { i.value = ''; });
     fresh?.querySelector('input')?.focus();
   }
@@ -591,11 +696,19 @@ $('view').addEventListener('submit', e => {
 $('view').addEventListener('change', e => {
   const el = e.target;
   const { act, list, id } = el.dataset;
-  if (act === 'buyer') send({ type: 'setBuyer', list, person: el.value || null });
+  const who = el.value || null;
+  if (act === 'buyer') send({ type: 'setBuyer', list, person: who });
   if (act === 'toggleItem') send({ type: 'updateItem', list, id, fields: { done: el.checked } });
   if (act === 'toggleGear') send({ type: 'updateGear', id, fields: { done: el.checked } });
-  if (act === 'gearWho') send({ type: 'updateGear', id, fields: { who: el.value || null } });
+  if (act === 'gearWho') send({ type: 'updateGear', id, fields: { who } });
   if (act === 'paid') send({ type: 'setPaid', key: el.dataset.key, paid: el.checked });
+  if (act === 'packed') {
+    const mine = packed();
+    const i = Number(el.dataset.i);
+    if (el.checked) mine.add(i); else mine.delete(i);
+    local.set(PACKED_KEY + ':' + state.event.id, JSON.stringify([...mine]));
+    render();
+  }
 });
 
 $('view').addEventListener('click', e => {
@@ -604,8 +717,29 @@ $('view').addEventListener('click', e => {
   const { act, list, id, cat } = el.dataset;
   const p = id && person(id);
   switch (act) {
-    case 'goPeople': return goPeople();
-    case 'back': tab = backTab; render(); return;
+    case 'goPeople': return goTab('people');
+    case 'goTab': return goTab(el.dataset.tab);
+    case 'editEvent': return eventDialog();
+    case 'lessons':
+      lessonMode = true;
+      return goTab('shop');
+    case 'lessonMode':
+      lessonMode = !lessonMode;
+      return render();
+    case 'lesson': {
+      const it = state.lists[list].find(i => i.id === id);
+      const value = LESSONS[el.dataset.v];
+      return send({ type: 'updateItem', list, id, fields: { lesson: it.lesson === value ? '' : value } });
+    }
+    case 'coming': {
+      const v = el.dataset.v || null;
+      return send({ type: 'updatePerson', id, fields: { coming: p.coming === v ? null : v } });
+    }
+    case 'shopList':
+      shopList = list;
+      local.set(SHOP_KEY, list);
+      render();
+      return showCameo(pickCameo(list));
     case 'editItem': return itemDialog(list, state.lists[list].find(i => i.id === id));
     case 'removeItem': return send({ type: 'removeItem', list, id });
     case 'copyList': {
@@ -616,12 +750,13 @@ $('view').addEventListener('click', e => {
     case 'editGear': {
       const g = state.gear.find(x => x.id === id);
       return openDialog(`<h3>עריכת ציוד</h3><label>מה</label><input type="text" name="name" value="${esc(g.name)}" maxlength="120" required>
-        <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
-      d => send({ type: 'updateGear', id, fields: { name: d.name.trim() } }));
+        <label>הערה</label><input type="text" name="note" value="${esc(g.note)}" maxlength="300">
+        <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}${deleteBtn}</div>`,
+      (f, action) => action === 'delete' ? send({ type: 'removeGear', id }) : send({ type: 'updateGear', id, fields: { name: f.name.trim(), note: f.note.trim() } }));
     }
     case 'removeGear': return send({ type: 'removeGear', id });
     case 'addExpense':
-      if (!state.people.length) return toast('הוסיפו קודם את החברים');
+      if (!state.people.length) return toast('הוסיפו קודם משפחות');
       return expenseDialog(null, cat);
     case 'editExpense': return expenseDialog(state.expenses.find(x => x.id === id));
     case 'removeExpense': {
@@ -639,7 +774,14 @@ $('view').addEventListener('click', e => {
       return openDialog(`<h3>עריכת שם</h3><input type="text" name="name" value="${esc(p.name)}" maxlength="80" required>
         <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
       d => send({ type: 'updatePerson', id, fields: { name: d.name.trim() } }));
-    case 'toggleSize': return send({ type: 'updatePerson', id, fields: { size: p.size === 2 ? 1 : 2 } });
+    case 'step': {
+      const field = el.dataset.field;
+      const fields = { [field]: p[field] + Number(el.dataset.d) };
+      // Fewer people can't leave more vegetarians than people.
+      if (field !== 'veg') fields.veg = Math.min(p.veg, (fields.adults ?? p.adults) + (fields.kids ?? p.kids));
+      return send({ type: 'updatePerson', id, fields });
+    }
+    case 'weight': return send({ type: 'updatePerson', id, fields: { weight: Number(el.dataset.w) } });
     case 'toggleSkip': return send({ type: 'updatePerson', id, fields: { skip: p.skip.includes(list) ? p.skip.filter(c => c !== list) : [...p.skip, list] } });
     case 'removePerson':
       if (confirm(`להסיר את ${p.name} מהסופ״ש?`)) send({ type: 'removePerson', id });

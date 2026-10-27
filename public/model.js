@@ -1,12 +1,19 @@
 // Shared data model for the weekend: used by both the page and the server,
 // so validation, edits and the settlement math are identical on both sides.
+import { LISTS_TEMPLATE, GEAR_TEMPLATE } from './template.js';
 
-export const LISTS = ['meat', 'alcohol', 'general'];
-export const CATEGORIES = [...LISTS, 'other'];
-export const LIST_LABELS = { meat: 'בשר ומנגל', alcohol: 'אלכוהול', general: 'אוכל כללי וכלים' };
-export const CATEGORY_LABELS = { ...LIST_LABELS, other: 'אחר' };
+// The four jobs the group hands out every time, in the order they are handed out.
+export const LISTS = ['meat', 'alcohol', 'general', 'breakfast'];
+export const LIST_LABELS = { meat: 'מנגל', alcohol: 'אלכוהול', general: 'קניות כלליות', breakfast: 'ארוחת בוקר' };
+export const CATEGORIES = [...LISTS, 'lodging', 'other'];
+export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'הצימר', other: 'אחר' };
+export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
+// Quick answers to "how was the quantity?" after a weekend.
+export const LESSONS = { missing: 'היה חסר', extra: 'היה יותר מדי', ok: 'בדיוק' };
+export const GEAR_GROUPS = { kitchen: 'מטבח', fire: 'מנגל ומדורה', fun: 'כללי ובידור' };
+export const WEIGHTS = [0.5, 1, 1.5, 2];
 
-const LIMITS = { people: 60, items: 300, gear: 200, expenses: 300, past: 50 };
+const LIMITS = { people: 40, items: 200, gear: 150, expenses: 300, past: 50 };
 const MAX_AMOUNT = 10_000_000; // agorot = ₪100,000
 
 const plain = x => x !== null && typeof x === 'object' && !Array.isArray(x);
@@ -16,44 +23,21 @@ const name = (x, max = 120) => text(x, max) && x.trim().length > 0;
 const id = x => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
 const date = x => x === '' || (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x));
 const amount = x => Number.isInteger(x) && x > 0 && x <= MAX_AMOUNT;
+const count = (x, max) => Number.isInteger(x) && x >= 0 && x <= max;
+const url = x => x === '' || (text(x, 300) && /^https:\/\//.test(x));
 
 export function newId() {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 16);
 }
 
-const item = (n, qty = '') => ({ id: newId(), name: n, qty, note: '', done: false });
-
 export function defaultState() {
   return {
-    version: 3,
-    event: { id: newId(), title: 'סופ״ש צימרים', date: '', place: '' },
+    version: 4,
+    event: { id: newId(), title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: 'טרה קוטה', link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: '', notes: '' },
     people: [],
-    buyers: { meat: null, alcohol: null, general: null },
-    lists: {
-      meat: [
-        item('אנטריקוט'), item('פרגיות'), item('קבב / המבורגרים'), item('נקניקיות'), item('כנפיים'),
-        item('פחמים'), item('מדליק גחלים'), item('פיתות / לחמניות'), item('חומוס וטחינה'),
-        item('סלטים למנגל'), item('ירקות לגריל'),
-      ],
-      alcohol: [
-        item('בירות'), item('יין אדום'), item('יין לבן'), item('ערק'), item('וודקה'), item('וויסקי'),
-        item('מיקסרים - טוניק, ספרייט, מיצים'), item('קרח'), item('לימונים'),
-      ],
-      general: [
-        item('סודה ושתייה קלה'), item('מים'), item('חלב'), item('ביצים'), item('לחם'), item('גבינות'),
-        item('ירקות לסלט'), item('פירות'), item('קפה, תה וסוכר'), item('חטיפים ונשנושים'),
-        item('צלחות, כוסות וסכו״ם חד״פ'), item('מפיות ומגבות נייר'), item('שקיות זבל'), item('נייר כסף'),
-      ],
-    },
-    gear: [
-      { id: newId(), name: 'מנגל', who: null, done: false },
-      { id: newId(), name: 'מלקחיים ומברשת למנגל', who: null, done: false },
-      { id: newId(), name: 'צידנית', who: null, done: false },
-      { id: newId(), name: 'רמקול', who: null, done: false },
-      { id: newId(), name: 'סכין חדה וקרש חיתוך', who: null, done: false },
-      { id: newId(), name: 'כבל מאריך', who: null, done: false },
-      { id: newId(), name: 'משחקי קופסה / קלפים', who: null, done: false },
-    ],
+    buyers: Object.fromEntries(LISTS.map(k => [k, null])),
+    lists: Object.fromEntries(LISTS.map(k => [k, LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }))])),
+    gear: GEAR_TEMPLATE.map(g => ({ id: newId(), ...g, who: null, done: false })),
     expenses: [],
     paid: [],
     past: [],
@@ -61,15 +45,15 @@ export function defaultState() {
 }
 
 export function validState(s) {
-  if (!onlyKeys(s, ['version', 'event', 'people', 'buyers', 'lists', 'gear', 'expenses', 'paid', 'past']) || s.version !== 3) return false;
+  if (!onlyKeys(s, ['version', 'event', 'people', 'buyers', 'lists', 'gear', 'expenses', 'paid', 'past']) || s.version !== 4) return false;
   const e = s.event;
-  if (!onlyKeys(e, ['id', 'title', 'date', 'place']) || !id(e.id) || !name(e.title) || !date(e.date) || !text(e.place, 120)) return false;
+  if (!onlyKeys(e, ['id', 'title', 'date', 'place', 'link', 'checkin', 'notes']) || !id(e.id) || !name(e.title) || !date(e.date) || !text(e.place, 120) || !url(e.link) || !text(e.checkin, 120) || !text(e.notes, 2000)) return false;
 
   if (!Array.isArray(s.people) || s.people.length > LIMITS.people) return false;
   const people = new Set();
   for (const p of s.people) {
-    if (!onlyKeys(p, ['id', 'name', 'size', 'skip']) || !id(p.id) || people.has(p.id) || !name(p.name, 80)) return false;
-    if (p.size !== 1 && p.size !== 2) return false;
+    if (!onlyKeys(p, ['id', 'name', 'coming', 'adults', 'kids', 'veg', 'weight', 'skip']) || !id(p.id) || people.has(p.id) || !name(p.name, 80)) return false;
+    if (!count(p.adults, 4) || p.adults < 1 || !count(p.kids, 10) || !count(p.veg, 14) || p.veg > p.adults + p.kids || !WEIGHTS.includes(p.weight) || !(p.coming === null || Object.hasOwn(COMING, p.coming))) return false;
     if (!Array.isArray(p.skip) || !p.skip.every(c => LISTS.includes(c)) || new Set(p.skip).size !== p.skip.length) return false;
     people.add(p.id);
   }
@@ -84,13 +68,13 @@ export function validState(s) {
     const list = s.lists[k];
     if (!Array.isArray(list) || list.length > LIMITS.items) return false;
     for (const it of list) {
-      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'done']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || typeof it.done !== 'boolean') return false;
+      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'lesson', 'who', 'done']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || !text(it.lesson, 300) || !person(it.who) || typeof it.done !== 'boolean') return false;
     }
   }
 
   if (!Array.isArray(s.gear) || s.gear.length > LIMITS.gear) return false;
   for (const g of s.gear) {
-    if (!onlyKeys(g, ['id', 'name', 'who', 'done']) || !fresh(g.id) || !name(g.name) || !person(g.who) || typeof g.done !== 'boolean') return false;
+    if (!onlyKeys(g, ['id', 'group', 'name', 'note', 'who', 'done']) || !fresh(g.id) || !Object.hasOwn(GEAR_GROUPS, g.group) || !name(g.name) || !text(g.note, 300) || !person(g.who) || typeof g.done !== 'boolean') return false;
   }
 
   if (!Array.isArray(s.expenses) || s.expenses.length > LIMITS.expenses) return false;
@@ -102,8 +86,8 @@ export function validState(s) {
 
   if (!Array.isArray(s.past) || s.past.length > LIMITS.past) return false;
   for (const p of s.past) {
-    if (!onlyKeys(p, ['id', 'title', 'date', 'place', 'total', 'people']) || !id(p.id) || !name(p.title) || !date(p.date) || !text(p.place, 120)) return false;
-    if (!Number.isInteger(p.total) || p.total < 0 || !Number.isInteger(p.people) || p.people < 0) return false;
+    if (!onlyKeys(p, ['id', 'title', 'date', 'place', 'total', 'families']) || !id(p.id) || !name(p.title) || !date(p.date) || !text(p.place, 120)) return false;
+    if (!Number.isInteger(p.total) || p.total < 0 || !Number.isInteger(p.families) || p.families < 0) return false;
   }
   return true;
 }
@@ -117,26 +101,32 @@ export function applyOp(state, op) {
   const list = k => LISTS.includes(k) ? s.lists[k] : fail('רשימה לא מוכרת');
   const find = (arr, x) => arr.find(v => v.id === x) || fail('הפריט כבר לא קיים - כנראה מישהו מחק אותו');
   const pick = (src, allowed) => Object.fromEntries(Object.entries(src || {}).filter(([k]) => allowed.includes(k)));
+  const str = x => String(x ?? '').trim();
+  const clearPerson = pid => {
+    for (const k of LISTS) {
+      if (s.buyers[k] === pid) s.buyers[k] = null;
+      for (const it of s.lists[k]) if (it.who === pid) it.who = null;
+    }
+    for (const g of s.gear) if (g.who === pid) g.who = null;
+  };
 
   switch (op?.type) {
     case 'setEvent':
-      Object.assign(s.event, pick(op.fields, ['title', 'date', 'place']));
+      Object.assign(s.event, pick(op.fields, ['title', 'date', 'place', 'link', 'checkin', 'notes']));
       break;
 
     case 'addPerson':
-      s.people.push({ id: op.id, name: String(op.name ?? '').trim(), size: op.size, skip: [] });
+      s.people.push({ id: op.id, name: str(op.name), coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0, weight: op.weight ?? 1, skip: [] });
       break;
     case 'updatePerson':
-      Object.assign(find(s.people, op.id), pick(op.fields, ['name', 'size', 'skip']));
+      Object.assign(find(s.people, op.id), pick(op.fields, ['name', 'coming', 'adults', 'kids', 'veg', 'weight', 'skip']));
       break;
-    case 'removePerson': {
+    case 'removePerson':
       find(s.people, op.id);
       if (s.expenses.some(x => x.payer === op.id)) fail('יש הוצאות על שמם - מחקו או העבירו אותן קודם');
       s.people = s.people.filter(p => p.id !== op.id);
-      for (const k of LISTS) if (s.buyers[k] === op.id) s.buyers[k] = null;
-      for (const g of s.gear) if (g.who === op.id) g.who = null;
+      clearPerson(op.id);
       break;
-    }
 
     case 'setBuyer':
       list(op.list);
@@ -144,10 +134,10 @@ export function applyOp(state, op) {
       break;
 
     case 'addItem':
-      list(op.list).push({ id: op.id, name: String(op.name ?? '').trim(), qty: String(op.qty ?? '').trim(), note: '', done: false });
+      list(op.list).push({ id: op.id, name: str(op.name), qty: str(op.qty), note: '', lesson: '', who: null, done: false });
       break;
     case 'updateItem':
-      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'done']));
+      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'lesson', 'who', 'done']));
       break;
     case 'removeItem':
       find(list(op.list), op.id);
@@ -155,10 +145,11 @@ export function applyOp(state, op) {
       break;
 
     case 'addGear':
-      s.gear.push({ id: op.id, name: String(op.name ?? '').trim(), who: op.who ?? null, done: false });
+      if (!Object.hasOwn(GEAR_GROUPS, op.group)) fail('קבוצת ציוד לא מוכרת');
+      s.gear.push({ id: op.id, group: op.group, name: str(op.name), note: '', who: op.who ?? null, done: false });
       break;
     case 'updateGear':
-      Object.assign(find(s.gear, op.id), pick(op.fields, ['name', 'who', 'done']));
+      Object.assign(find(s.gear, op.id), pick(op.fields, ['name', 'note', 'who', 'done']));
       break;
     case 'removeGear':
       find(s.gear, op.id);
@@ -166,7 +157,7 @@ export function applyOp(state, op) {
       break;
 
     case 'addExpense':
-      s.expenses.push({ id: op.id, payer: op.payer, amount: op.amount, what: String(op.what ?? '').trim(), cat: op.cat });
+      s.expenses.push({ id: op.id, payer: op.payer, amount: op.amount, what: str(op.what), cat: op.cat });
       break;
     case 'updateExpense':
       Object.assign(find(s.expenses, op.id), pick(op.fields, ['payer', 'amount', 'what', 'cat']));
@@ -183,16 +174,17 @@ export function applyOp(state, op) {
       break;
     }
 
-    // Close this weekend and start the next one: same friends and lists,
-    // nothing bought yet, no expenses. A summary of the old one stays in `past`.
+    // Close this weekend and start the next one: same families, lists and gear
+    // (with the lessons learned), nobody confirmed, nothing bought or assigned yet, no expenses.
     case 'newEvent': {
       const old = s.event;
-      s.past.unshift({ id: old.id, title: old.title, date: old.date, place: old.place, total: total(s), people: headcount(s) });
+      s.past.unshift({ id: old.id, title: old.title, date: old.date, place: old.place, total: total(s), families: payers(s).length });
       s.past = s.past.slice(0, LIMITS.past);
-      s.event = { id: op.id, title: String(op.title ?? '').trim(), date: op.date ?? '', place: String(op.place ?? '').trim() };
-      for (const k of LISTS) for (const it of s.lists[k]) it.done = false;
+      s.event = { id: op.id, title: str(op.title), date: op.date ?? '', place: str(op.place), link: '', checkin: '', notes: '' };
+      for (const k of LISTS) for (const it of s.lists[k]) { it.done = false; it.who = null; }
       for (const g of s.gear) { g.done = false; g.who = null; }
-      s.buyers = { meat: null, alcohol: null, general: null };
+      for (const p of s.people) p.coming = null;
+      s.buyers = Object.fromEntries(LISTS.map(k => [k, null]));
       s.expenses = [];
       s.paid = [];
       break;
@@ -205,23 +197,29 @@ export function applyOp(state, op) {
   return s;
 }
 
-export const headcount = s => s.people.reduce((n, p) => n + p.size, 0);
+// Families who said they're not coming drop out of the counts and the bill.
+export const payers = s => s.people.filter(p => p.coming !== 'no');
+export const coming = s => s.people.filter(p => p.coming === 'yes');
+export const adults = s => coming(s).reduce((n, p) => n + p.adults, 0);
+export const kids = s => coming(s).reduce((n, p) => n + p.kids, 0);
+export const veg = s => coming(s).reduce((n, p) => n + p.veg, 0);
 export const total = s => s.expenses.reduce((n, x) => n + x.amount, 0);
 
-// Who owes what. Every expense is split by headcount between the people who
-// take part in its category (couples count twice, singles once; "other" is
-// shared by everyone). All money is in agorot to avoid rounding drift.
+// Who owes what. Like the group always did it: each family pays an equal share,
+// times its weight (e.g. ½ for someone coming alone), among the families that take
+// part in that expense's category. All money is in agorot to avoid rounding drift.
 export function settle(s) {
   const balance = Object.fromEntries(s.people.map(p => [p.id, 0]));
   const share = Object.fromEntries(s.people.map(p => [p.id, 0]));
   for (const x of s.expenses) {
     balance[x.payer] += x.amount;
-    let members = s.people.filter(p => x.cat === 'other' || !p.skip.includes(x.cat));
-    if (!members.length) members = s.people;
-    const units = members.reduce((n, p) => n + p.size, 0);
-    // Split exactly: hand out the leftover agorot one by one so the shares add up to the expense.
+    let members = payers(s).filter(p => !LISTS.includes(x.cat) || !p.skip.includes(x.cat));
+    if (!members.length) members = payers(s);
+    if (!members.length) members = s.people.filter(p => p.id === x.payer);
+    // Weights are multiples of ½, so work in halves to keep everything in integers.
+    const units = members.reduce((n, p) => n + p.weight * 2, 0);
     let left = x.amount;
-    const parts = members.map(p => { const v = Math.floor(x.amount * p.size / units); left -= v; return [p.id, v]; });
+    const parts = members.map(p => { const v = Math.floor(x.amount * p.weight * 2 / units); left -= v; return [p.id, v]; });
     for (let i = 0; left > 0; i = (i + 1) % parts.length, left--) parts[i][1]++;
     for (const [pid, v] of parts) { share[pid] += v; balance[pid] -= v; }
   }

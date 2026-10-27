@@ -44,7 +44,7 @@ test('two people editing at once both keep their changes', async () => {
   const { call } = harness();
   const { state } = await (await call()).json();
   const [a, b] = await Promise.all([
-    call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'דני', size: 2 }] }),
+    call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'דני' }] }),
     call('POST', { ops: [{ type: 'updateItem', list: 'meat', id: state.lists.meat[0].id, fields: { done: true } }] }),
   ]);
   assert.equal(a.status, 200);
@@ -57,7 +57,7 @@ test('two people editing at once both keep their changes', async () => {
 test('an edit that no longer applies is reported with its position, nothing saved', async () => {
   const { call } = harness();
   const r = await call('POST', { ops: [
-    { type: 'addPerson', id: 'p1', name: 'דני', size: 2 },
+    { type: 'addPerson', id: 'p1', name: 'דני' },
     { type: 'removeItem', list: 'meat', id: 'already-gone' },
   ] });
   assert.equal(r.status, 422);
@@ -69,7 +69,7 @@ test('an edit that no longer applies is reported with its position, nothing save
 
 test('the test namespace is separate from the real list', async () => {
   const { call, prod } = harness();
-  await call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'טסט', size: 1 }] }, {}, '?test=1');
+  await call('POST', { ops: [{ type: 'addPerson', id: 'p1', name: 'טסט', adults: 1 }] }, {}, '?test=1');
   assert.equal(prod.map.size, 0);
   assert.equal((await call('GET', undefined, {}, '?bad=1')).status, 400);
 });

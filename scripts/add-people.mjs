@@ -19,6 +19,6 @@ const api = async (method, body) => {
 
 const { state } = await api('GET');
 const have = new Set(state.people.map(p => p.name));
-const ops = people.filter(p => !have.has(p.name)).map(p => ({ type: 'addPerson', id: newId(), name: p.name, size: p.size }));
+const ops = people.filter(p => !have.has(p.name)).map(p => ({ type: 'addPerson', id: newId(), name: p.name, adults: p.adults, kids: p.kids ?? 0 }));
 if (ops.length) await api('POST', { ops });
 console.log(`added ${ops.length}, already there ${people.length - ops.length}`);
