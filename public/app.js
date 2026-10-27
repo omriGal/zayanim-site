@@ -434,7 +434,7 @@ function gearView() {
         <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="ארוז">
         <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
         <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
-        <button class="nope" data-act="skipGear" data-id="${g.id}" title="הפעם לא צריך" aria-label="הפעם לא צריך">${face}</button>
+        <button class="nope" data-act="skipGear" data-id="${g.id}" aria-label="הפעם לא צריך"><span class="nope-says">הפעם<br>לא צריך</span><span class="nope-face">${face}</span></button>
       </li>`).join('')}</ul>` : '<div class="empty">הפעם לא צריך כלום</div>'}
     ${skipped.length ? `<div class="skipped">
       <b>הפעם לא צריך</b> <span class="small muted">יחזרו לרשימה בסופ״ש הבא</span>
