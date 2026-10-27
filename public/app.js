@@ -59,11 +59,85 @@ function accept(data) {
 
 // Apply an edit on screen right away, then send it in the background.
 function send(op) {
+  const before = state;
   try { state = applyOp(state, op); } catch (e) { toast(e.message); return false; }
   queue.push(op);
   render();
   flush();
+  cameoFor(op, before);
   return true;
+}
+
+// ---------- friends popping up ----------
+
+// Who says what. Photos come from /api/photo, which needs the group code.
+const SAYS = {
+  morning: 'בוקר טוב, דבר ראשון הכל בסדר',
+  grill: 'בטוח שיש מספיק בשר?',
+  eggs: 'יש מספיק ביצים?',
+  'not-needed': 'את זה לא צריך',
+  cooling: 'דרוש קירור',
+  aperol: '', shades: '', 'random-1': '', 'random-2': '', 'random-3': '', 'random-4': '',
+};
+const BY_TAB = { alcohol: 'aperol', meat: 'grill', general: 'eggs' };
+const ANYWHERE = ['shades', 'not-needed', 'cooling', 'random-1', 'random-2', 'random-3', 'random-4'];
+const photos = {};
+let lastCameo = '';
+let cameoTimer;
+
+async function loadPhotos() {
+  await Promise.all(Object.keys(SAYS).map(async name => {
+    if (photos[name]) return;
+    try {
+      const r = await fetch('/api/photo?name=' + name, { headers: { 'X-Edit-Code': code } });
+      if (r.ok) photos[name] = URL.createObjectURL(await r.blob());
+    } catch { /* no photo, no cameo */ }
+  }));
+}
+
+const pickOne = list => {
+  const options = list.filter(n => photos[n] && n !== lastCameo);
+  return options[Math.floor(Math.random() * options.length)];
+};
+
+function pickCameo(list, itemName = '', adding = false) {
+  if (/ביצ/.test(itemName) && photos.eggs) return 'eggs';
+  if (adding && Math.random() < 0.3 && photos['not-needed']) return 'not-needed';
+  const own = BY_TAB[list];
+  if (own && own !== lastCameo && Math.random() < 0.55 && photos[own]) return own;
+  return pickOne(ANYWHERE);
+}
+
+function cameoFor(op, before) {
+  const list = op.list || (LISTS.includes(tab) ? tab : '');
+  const itemName = op.name || (op.type === 'updateItem' ? before.lists[op.list]?.find(i => i.id === op.id)?.name : '') || '';
+  showCameo(pickCameo(list, itemName, op.type === 'addItem' || op.type === 'addGear'));
+}
+
+function showCameo(name) {
+  const el = $('cameo');
+  if (!name || el.classList.contains('on')) return;
+  lastCameo = name;
+  $('cameoImg').src = photos[name];
+  $('cameoSays').textContent = SAYS[name];
+  $('cameoSays').hidden = !SAYS[name];
+  el.classList.add('on');
+  clearTimeout(cameoTimer);
+  cameoTimer = setTimeout(() => el.classList.remove('on'), 2800);
+}
+$('cameo').addEventListener('click', () => { clearTimeout(cameoTimer); $('cameo').classList.remove('on'); });
+
+// Every time the site opens.
+function morning() {
+  if (!photos.morning) return;
+  const el = $('splash');
+  $('splashImg').src = photos.morning;
+  $('splashSays').textContent = SAYS.morning;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('on'));
+  const close = () => { el.classList.remove('on'); setTimeout(() => { el.hidden = true; }, 300); };
+  el.onclick = close;
+  setTimeout(close, 3200);
 }
 
 async function flush() {
@@ -124,6 +198,7 @@ async function login(c) {
     $('gate').hidden = true;
     $('app').hidden = false;
     accept(data);
+    loadPhotos().then(morning);
   } catch (e) {
     if (e.status === 401) { local.del(CODE_KEY); code = ''; }
     showGate(e.status === 401 ? 'הקוד לא נכון' : e.message);
@@ -242,7 +317,7 @@ function listView(k) {
   return `
   ${noPeopleHint()}
   <section class="nametag">
-    <div class="nametag-top"><span>היי, אני קונה</span><b>${esc(BUY_LABELS[k])}</b></div>
+    <div class="nametag-top"><span>מי קונה</span><b>${esc(BUY_LABELS[k])}</b></div>
     <div class="nametag-body">
       <select id="buyer-${k}" data-act="buyer" data-list="${k}" class="${buyer ? '' : 'unset'}" aria-label="מי קונה ${esc(LIST_LABELS[k])}">${options(buyer, 'מי? בחרו שם')}</select>
       <div class="spent">
@@ -492,6 +567,7 @@ $('tabs').addEventListener('click', e => {
   render();
   scrollTo(0, 0);
   refresh();
+  showCameo(pickCameo(tab));
 });
 
 $('view').addEventListener('submit', e => {

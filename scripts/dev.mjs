@@ -5,24 +5,24 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
 import { makeHandler } from '../lib/api.mjs';
+import { makePhotoHandler } from '../lib/photos.mjs';
 import { MemoryStore } from '../tests/memory-store.mjs';
 
 const PORT = Number(process.env.PORT) || 8888;
 const CODE = 'local-dev-code-1234567890';
 const root = new URL('../public/', import.meta.url).pathname.replace(/^\/(\w:)/, '$1');
 const stores = { false: new MemoryStore(), true: new MemoryStore() };
-const api = makeHandler({
-  storeFor: t => stores[t],
-  env: { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(CODE).digest('hex') },
-});
-const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json' };
+const env = { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(CODE).digest('hex') };
+const api = makeHandler({ storeFor: t => stores[t], env });
+const photo = makePhotoHandler({ env });
+const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json' };
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
-  if (url.pathname === '/api/list') {
+  if (url.pathname === '/api/list' || url.pathname === '/api/photo') {
     const chunks = [];
     for await (const c of req) chunks.push(c);
-    const r = await api(new Request(url, {
+    const r = await (url.pathname === '/api/photo' ? photo : api)(new Request(url, {
       method: req.method,
       headers: req.headers,
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks),

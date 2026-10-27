@@ -1,0 +1,11 @@
+{
+  "name": "סופ״ש צימרים",
+  "short_name": "צימרים",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#13241d",
+  "theme_color": "#13241d",
+  "icons": [{ "src": "/captain-192.png", "sizes": "192x192", "type": "image/png" }]
+}
