@@ -25,6 +25,7 @@
   --moss: #4d6b37;
   --red: #c4361b;
   --hard: 4px 4px 0 var(--ink);
+  --badge: 0px; /* room under the tab bar for Netlify's badge, when it is there */
   --display: "Karantina", "Rubik", sans-serif;
   --hand: "Amatic SC", "Rubik", cursive;
 }
@@ -72,7 +73,10 @@ button { cursor: pointer; }
 .chip { border: 2px solid #f5e9c866; background: #0b161166; color: var(--sheet); border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 500; }
 .sync { font-size: 12px; color: #f5e9c8aa; margin-top: 10px; min-height: 1em; }
 
-main { padding: 18px 16px calc(100px + env(safe-area-inset-bottom)); }
+main { padding: 18px 16px calc(100px + var(--badge) + env(safe-area-inset-bottom)); }
+/* Netlify's free plan pins a "Powered by Netlify" badge to the bottom corner, over everything.
+   Keep it visible, but give it its own strip under the tabs so it never covers them. */
+body:has(#nl-badge-frame) { --badge: 54px; }
 
 /* ---------- paper cards ---------- */
 .card { background: var(--sheet); border: 2px solid var(--ink); border-radius: 4px; box-shadow: var(--hard); padding: 16px; margin-bottom: 20px; }
@@ -180,7 +184,7 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
 .pill.off { background: transparent; border-style: dashed; color: var(--red); border-color: var(--red); text-decoration: line-through; }
 
 /* ---------- bottom bar ---------- */
-nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; background: var(--night); border-top: 2px solid var(--ink); padding-bottom: env(safe-area-inset-bottom); }
+nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; background: var(--night); border-top: 2px solid var(--ink); padding-bottom: calc(var(--badge) + env(safe-area-inset-bottom)); }
 nav.tabs .inner { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px 4px; gap: 4px; }
 nav.tabs button { border: 0; background: none; color: #f5e9c8aa; padding: 6px 2px 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; font-weight: 500; border-radius: 4px; }
 nav.tabs svg { width: 24px; height: 24px; }
@@ -240,7 +244,13 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
 .nope-says { position: relative; background: #fff; border: 2px solid var(--ink); border-radius: 12px; padding: 3px 7px 4px; font: 700 19px/.85 var(--hand); color: var(--ink); white-space: nowrap; box-shadow: 2px 2px 0 var(--ink); }
 .nope-says::after { content: ''; position: absolute; left: -7px; top: 50%; width: 10px; height: 10px; margin-top: -6px; background: #fff; border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: rotate(45deg); }
 .nope:active .nope-face, .nope:active .nope-says { transform: scale(.92); }
-@media (max-width: 380px) { .nope-says { font-size: 15px; padding: 2px 5px 3px; } .row select { max-width: 34%; } }
+@media (max-width: 380px) { .nope-says { font-size: 15px; padding: 2px 5px 3px; } }
+/* Gear: name and the "not needed" button on top, who brings it underneath, so the name never gets squeezed. */
+.gear-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "check title nope" ". who who"; column-gap: 10px; row-gap: 6px; }
+.gear-row .check { grid-area: check; }
+.gear-row .grow { grid-area: title; }
+.gear-row .nope { grid-area: nope; }
+.gear-row select.who { grid-area: who; width: 100%; max-width: none; }
 .skipped { margin-top: 12px; padding-top: 10px; border-top: 2px dashed #1b1a1726; }
 .skipped-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .skipped-list .pill { text-decoration: line-through; color: var(--muted); }
@@ -264,8 +274,8 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
 .step b { min-width: 14px; text-align: center; color: var(--ink); font-size: 16px; }
 
 /* ---------- friends popping up ---------- */
-.cameo { position: fixed; left: 12px; bottom: calc(82px + env(safe-area-inset-bottom)); z-index: 15; display: flex; align-items: flex-end; gap: 6px; max-width: calc(100% - 24px); transform: translateY(160%) rotate(-8deg); transition: transform .4s cubic-bezier(.2, 1.4, .4, 1); pointer-events: none; }
-.cameo.on { transform: none; pointer-events: auto; }
+.cameo { position: fixed; left: 12px; bottom: calc(82px + var(--badge) + env(safe-area-inset-bottom)); z-index: 15; display: flex; align-items: flex-end; gap: 6px; max-width: calc(100% - 24px); transform: translateY(160%) rotate(-8deg); visibility: hidden; transition: transform .4s cubic-bezier(.2, 1.4, .4, 1), visibility 0s .4s; pointer-events: none; }
+.cameo.on { transform: none; visibility: visible; transition-delay: 0s; pointer-events: auto; }
 .polaroid { background: #fff; padding: 5px 5px 18px; border: 2px solid var(--ink); box-shadow: var(--hard); transform: rotate(-4deg); flex: none; }
 /* Crop from near the top: in these photos the face is in the upper part. */
 .polaroid img { display: block; width: 96px; height: 116px; object-fit: cover; object-position: 50% 15%; }

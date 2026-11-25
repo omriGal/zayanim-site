@@ -435,10 +435,10 @@ function gearView() {
   <section class="card">
     <h2>ציוד שחוזר כל פעם <small>${missing ? `ל-${missing} פריטים אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</small></h2>
     ${needed.length ? `<ul class="rows">${needed.map(g => `
-      <li class="row ${g.done ? 'done' : ''}">
+      <li class="row gear-row ${g.done ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="toggleGear" data-id="${g.id}" ${g.done ? 'checked' : ''} aria-label="ארוז">
         <div class="grow"><button class="title" data-act="editGear" data-id="${g.id}">${esc(g.name)}</button></div>
-        <select data-act="gearWho" data-id="${g.id}" class="${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
+        <select data-act="gearWho" data-id="${g.id}" class="who ${g.who ? '' : 'unset'}" aria-label="מי מביא">${options(g.who, 'מי מביא?')}</select>
         <button class="nope" data-act="skipGear" data-id="${g.id}" aria-label="הפעם לא צריך"><span class="nope-says">הפעם<br>לא צריך</span><span class="nope-face">${face}</span></button>
       </li>`).join('')}</ul>` : '<div class="empty">הפעם לא צריך כלום</div>'}
     ${skipped.length ? `<div class="skipped">
