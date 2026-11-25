@@ -16,7 +16,11 @@ if (!process.env.ZAYANIM_CODE) {
   await rl.question('העתיקו את קוד הקבוצה ולחצו Enter… ');
   rl.close();
   const code = clipboard();
-  if (code.length < 15) throw new Error('בלוח ההעתקה אין קוד באורך 15 תווים לפחות');
+  // Don't echo whatever else is on the clipboard; just say it isn't a code.
+  if (code.length < 15 || code.length > 200 || /\s/.test(code)) {
+    console.error('מה שבלוח ההעתקה לא נראה כמו קוד הקבוצה (15-200 תווים, בלי רווחים). העתיקו רק את הקוד ונסו שוב.');
+    process.exit(1);
+  }
   console.log(`התקבל קוד באורך ${code.length} תווים`);
   process.env.ZAYANIM_CODE = code;
 }
