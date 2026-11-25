@@ -4,10 +4,10 @@ import { applyOp, defaultState, validState, upgrade, settle, total, adults, kids
 
 function weekend() {
   let s = defaultState();
-  const add = (id, name, adults = 2, weight = 1) => { s = applyOp(s, { type: 'addPerson', id, name, adults, weight }); };
+  const add = (id, name, adults = 2) => { s = applyOp(s, { type: 'addPerson', id, name, adults }); };
   add('dani', 'דני ומיכל');
   add('yossi', 'יוסי ורוני');
-  add('avi', 'אבי', 1, 0.5);
+  add('levi', 'משפחת לוי');
   return s;
 }
 const pay = (s, id, payer, amount, cat) => applyOp(s, { type: 'addExpense', id, payer, amount, what: 'קבלה', cat });
@@ -25,7 +25,7 @@ test('rejects bad data', () => {
   assert.throws(() => applyOp(s, { type: 'addPerson', id: 'x', name: '  ' }));
   assert.throws(() => applyOp(s, { type: 'addPerson', id: 'dani', name: 'כפול' }), 'duplicate id');
   assert.throws(() => applyOp(s, { type: 'addPerson', id: 'y', name: 'אף אחד', adults: 0 }));
-  assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { weight: 0.7 } }));
+  assert.throws(() => applyOp(s, { type: 'addExpense', id: 'e9', payer: 'dani', amount: 100, what: 'x', cat: 'other', for: 'nobody' }), 'unknown family');
   assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { veg: 3 } }), 'more vegetarians than people');
   assert.throws(() => pay(s, 'e1', 'nobody', 100, 'meat'), 'unknown payer');
   assert.throws(() => pay(s, 'e1', 'dani', -5, 'meat'));
@@ -56,7 +56,7 @@ test('families who are not coming drop out of the counts and the bill', () => {
   s = pay(s, 'e1', 'dani', 30000, 'meat');
   const { share } = settle(s);
   assert.equal(share.yossi, 0);
-  assert.equal(share.dani, 20000);   // ₪300 over weights 1 + ½ (avi hasn't answered, so still pays)
+  assert.equal(share.dani, 15000);   // ₪300 over dani and levi (levi hasn't answered, so still pays)
   assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'maybe' } }));
 });
 
@@ -72,6 +72,8 @@ test('gear marked "not needed this time" comes back next weekend', () => {
 test('older saved data without the skip flag is upgraded', () => {
   const s = defaultState();
   for (const g of s.gear) delete g.skipped;
+  s.people.push({ id: 'old', name: 'ישנים', phone: '', coming: null, adults: 2, kids: 0, veg: 0, weight: 1, skip: [] });
+  s.expenses.push({ id: 'e1', payer: 'old', amount: 100, what: 'x', cat: 'other' });
   assert(!validState(s));
   assert(validState(upgrade(s)));
 });
@@ -97,35 +99,34 @@ test('removing a family clears everything assigned to it but refuses if they pai
   assert.throws(() => applyOp(pay(s, 'e1', 'yossi', 100, 'meat'), { type: 'removePerson', id: 'yossi' }), /הוצאות/);
 });
 
-test('settlement splits equally per family, by weight, and balances to zero', () => {
-  let s = weekend(); // weights 1 + 1 + ½ = 2.5
-  s = pay(s, 'e1', 'dani', 100000, 'meat');     // ₪1,000
-  s = pay(s, 'e2', 'yossi', 50000, 'alcohol');  // ₪500
+test('settlement splits every expense equally between families and balances to zero', () => {
+  let s = weekend();
+  s = pay(s, 'e1', 'dani', 90000, 'meat');     // ₪900
+  s = pay(s, 'e2', 'yossi', 30000, 'alcohol'); // ₪300
   const { share, balance, transfers } = settle(s);
-  assert.equal(share.dani + share.yossi + share.avi, total(s));
-  assert.equal(share.dani, 60000);    // 1/2.5 of ₪1,500
-  assert.equal(share.avi, 30000);     // half a family
-  assert.equal(balance.dani, 40000);
+  assert.deepEqual(share, { dani: 40000, yossi: 40000, levi: 40000 });
+  assert.equal(balance.dani, 50000);
   assert.equal(balance.yossi, -10000);
   assert.equal(Object.values(balance).reduce((a, b) => a + b, 0), 0);
-  assert.deepEqual(transfers.map(t => [t.from, t.to, t.amount]), [['avi', 'dani', 30000], ['yossi', 'dani', 10000]]);
+  assert.deepEqual(transfers.map(t => [t.from, t.to, t.amount]), [['levi', 'dani', 40000], ['yossi', 'dani', 10000]]);
 });
 
-test('families who skip a category do not pay for it; lodging is shared by all', () => {
+test('an expense for one family only is carried by that family', () => {
   let s = weekend();
-  s = applyOp(s, { type: 'updatePerson', id: 'avi', fields: { skip: ['alcohol'] } });
-  s = pay(s, 'e1', 'dani', 40000, 'alcohol');
-  s = pay(s, 'e2', 'dani', 25000, 'lodging');
+  // The zimmer: ₪1,000 a night per unit, the Levi unit ₪1,300; dani paid it all for 2 nights.
+  s = pay(s, 'e1', 'dani', 600000, 'lodging');
+  s = applyOp(s, { type: 'addExpense', id: 'e2', payer: 'dani', amount: 60000, what: 'תוספת ליחידה', cat: 'lodging', for: 'levi' });
   const { share } = settle(s);
-  assert.equal(share.avi, 5000);              // only his half-share of the zimmer
-  assert.equal(share.yossi, 20000 + 10000);
+  assert.equal(share.levi, 200000 + 60000);
+  assert.equal(share.yossi, 200000);
+  assert.throws(() => applyOp(s, { type: 'removePerson', id: 'levi' }), /הוצאות/);
 });
 
 test('odd amounts still add up exactly', () => {
   let s = weekend();
-  s = pay(s, 'e1', 'avi', 10001, 'general');
+  s = pay(s, 'e1', 'levi', 10001, 'general');
   const { share, balance } = settle(s);
-  assert.equal(share.dani + share.yossi + share.avi, 10001);
+  assert.equal(share.dani + share.yossi + share.levi, 10001);
   assert.equal(Object.values(balance).reduce((a, b) => a + b, 0), 0);
 });
 

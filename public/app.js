@@ -1,4 +1,4 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, WEIGHTS, COMING, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
@@ -243,7 +243,6 @@ const dayDate = (base, offset) => { const d = new Date(base + 'T12:00'); d.setDa
 const short = d => d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
 const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
-const weightLabel = w => ({ 0.5: '½', 1: '1', 1.5: '1½', 2: '2' })[w];
 
 function eventWhen() {
   const e = state.event;
@@ -456,25 +455,25 @@ function gearView() {
 function moneyView() {
   if (!state.people.length) return noPeopleHint();
   const sum = total(state);
-  const units = payers(state).reduce((n, p) => n + p.weight, 0);
+  const families = payers(state).length;
+  const shared = state.expenses.filter(x => !x.for).reduce((n, x) => n + x.amount, 0);
   const { share, balance, transfers } = settle(state);
-  const skips = LISTS.map(k => [k, state.people.filter(p => p.skip.includes(k))]).filter(([, ps]) => ps.length);
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
   return `
   <section class="receipt">
     <div class="r-head"><b>חשבון סופי</b><span>${esc(state.event.title)}</span></div>
     ${state.expenses.length ? state.expenses.map(x => `
       <div class="r-line">
-        <button class="what" data-act="editExpense" data-id="${x.id}"><b>${esc(x.what)}</b><span>${esc(CATEGORY_LABELS[x.cat])} · שילמו ${esc(personName(x.payer))}</span></button>
+        <button class="what" data-act="editExpense" data-id="${x.id}"><b>${esc(x.what)}</b><span>${esc(CATEGORY_LABELS[x.cat])} · שילמו ${esc(personName(x.payer))}${x.for ? ` · <b class="only">רק על ${esc(personName(x.for))}</b>` : ''}</span></button>
         <span class="amount">${shekels(x.amount)}</span>
         <button class="x" data-act="removeExpense" data-id="${x.id}" aria-label="מחיקה">×</button>
       </div>`).join('') : '<div class="empty">עוד אין קבלות</div>'}
     <div class="r-total"><span>סה״כ</span><b>${shekels(sum)}</b></div>
     <div class="r-split">
-      <div><b>${units ? shekels(Math.round(sum / units)) : '—'}</b><span>${skips.length ? 'בממוצע למשפחה' : 'לכל משפחה'}</span></div>
-      <div><b>${payers(state).length}</b><span>משפחות</span></div>
+      <div><b>${families ? shekels(Math.round(shared / families)) : '—'}</b><span>לכל משפחה</span></div>
+      <div><b>${families}</b><span>משפחות</span></div>
     </div>
-    ${skips.length ? `<p class="r-note">${skips.map(([k, ps]) => `בלי ${esc(LIST_LABELS[k])}: ${ps.map(p => esc(p.name)).join(', ')}`).join('<br>')}</p>` : ''}
+    ${shared !== sum ? `<p class="r-note">ועוד ${shekels(sum - shared)} שנרשמו על משפחה מסוימת</p>` : ''}
     <button class="btn fire block" data-act="addExpense" data-cat="">+ הוספת קבלה</button>
   </section>
 
@@ -516,7 +515,7 @@ function peopleView() {
       <select name="adults" aria-label="מבוגרים"><option value="2">זוג</option><option value="1">לבד</option></select>
       <button class="btn" aria-label="הוספה">+</button>
     </form>
-    <p class="muted small">ההוצאות מתחלקות שווה בשווה בין המשפחות שמגיעות. "חלק" קובע כמה משפחה משלמת ביחס לאחרות, למשל ½ למי שמגיע לבד. מי שלא שותה או לא אוכל בשר - לחצו על הקטגוריה כדי להוציא אותו ממנה.</p>
+    <p class="muted small">ההוצאות מתחלקות שווה בשווה בין המשפחות שמגיעות. הוצאה שהיא של משפחה אחת (למשל יחידה יקרה יותר) נרשמת בחשבון "רק על" אותה משפחה.</p>
     ${state.people.length ? state.people.map(p => `
       <div class="person ${p.coming === 'no' ? 'not-coming' : ''}">
         <div class="person-head">
@@ -527,13 +526,7 @@ function peopleView() {
         <div class="rsvp">${Object.entries(COMING).map(([v, label]) =>
           `<button class="pill ${p.coming === v ? (v === 'yes' ? 'on' : 'off') : ''}" data-act="coming" data-id="${p.id}" data-v="${v}">${label}</button>`).join('')}
           ${p.coming === null ? '<span class="small" style="color:var(--fire)">עוד לא ענו</span>' : ''}</div>
-        ${p.coming === 'no' ? '' : `<div class="steps">${stepper(p, 'adults', 'מבוגרים', 1, 4)}${stepper(p, 'kids', 'ילדים', 0, 10)}${stepper(p, 'veg', 'צמחונים', 0, p.adults + p.kids)}</div>
-        <div class="toggles">חלק בחשבון:
-          ${WEIGHTS.map(w => `<button class="pill ${p.weight === w ? 'on' : ''}" data-act="weight" data-id="${p.id}" data-w="${w}">${weightLabel(w)}</button>`).join('')}
-        </div>
-        <div class="toggles">משתתפים ב:
-          ${LISTS.map(k => `<button class="pill ${p.skip.includes(k) ? 'off' : 'on'}" data-act="toggleSkip" data-id="${p.id}" data-list="${k}">${esc(LIST_LABELS[k])}</button>`).join('')}
-        </div>`}
+        ${p.coming === 'no' ? '' : `<div class="steps">${stepper(p, 'adults', 'מבוגרים', 1, 4)}${stepper(p, 'kids', 'ילדים', 0, 10)}${stepper(p, 'veg', 'צמחונים', 0, p.adults + p.kids)}</div>`}
       </div>`).join('') : '<div class="empty">עוד אין אף אחד ברשימה.</div>'}
   </section>`;
 }
@@ -571,15 +564,17 @@ function itemDialog(k, it) {
 
 function expenseDialog(x, cat) {
   const editing = Boolean(x);
-  x ||= { what: cat ? LIST_LABELS[cat] : '', amount: 0, payer: (cat && state.buyers[cat]) || '', cat: cat || 'other' };
+  x ||= { what: cat ? LIST_LABELS[cat] : '', amount: 0, payer: (cat && state.buyers[cat]) || '', cat: cat || 'other', for: null };
   openDialog(`<h3>${editing ? 'עריכת הוצאה' : 'הוספת הוצאה'}</h3>
-    <label>על מה</label><input type="text" name="what" value="${esc(x.what)}" maxlength="120" required placeholder="למשל: קצביה, סופר, חנות משקאות">
+    <label>על מה</label><input type="text" name="what" value="${esc(x.what)}" maxlength="120" required placeholder="למשל: קצביה, סופר, תוספת ליחידה">
     <label>סכום (₪)</label><input type="number" name="amount" value="${x.amount ? x.amount / 100 : ''}" min="0.01" step="0.01" inputmode="decimal" required>
     <label>מי שילם</label><select name="payer" required>${options(x.payer, 'בחרו')}</select>
+    <label>על חשבון</label><select name="for">${options(x.for, 'כולם, שווה בשווה')}</select>
+    <p class="small muted" style="margin:4px 0 0">משפחה אחת רק כשההוצאה היא שלה בלבד, למשל ההפרש על יחידה יקרה יותר.</p>
     <label>קטגוריה</label><select name="cat">${CATEGORIES.map(c => `<option value="${c}" ${c === x.cat ? 'selected' : ''}>${esc(CATEGORY_LABELS[c])}</option>`).join('')}</select>
     <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
   d => {
-    const fields = { what: d.what.trim(), amount: toAgorot(d.amount), payer: d.payer, cat: d.cat };
+    const fields = { what: d.what.trim(), amount: toAgorot(d.amount), payer: d.payer, cat: d.cat, for: d.for || null };
     if (editing) send({ type: 'updateExpense', id: x.id, fields });
     else if (send({ type: 'addExpense', id: newId(), ...fields })) toast('ההוצאה נוספה להתחשבנות');
   });
@@ -681,7 +676,7 @@ $('view').addEventListener('submit', e => {
   let ok = false;
   if (f.dataset.form === 'addItem') ok = send({ type: 'addItem', list: f.dataset.list, id: newId(), name, qty: d.qty });
   if (f.dataset.form === 'addGear') ok = send({ type: 'addGear', id: newId(), name, who: null });
-  if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, adults: Number(d.adults), weight: 1 });
+  if (f.dataset.form === 'addPerson') ok = send({ type: 'addPerson', id: newId(), name, adults: Number(d.adults) });
   if (ok) {
     // send() already redrew the page, so clear the new copy of the form.
     const sel = `form[data-form="${f.dataset.form}"]` + ['list'].map(k => f.dataset[k] ? `[data-${k}="${f.dataset[k]}"]` : '').join('');
@@ -772,8 +767,6 @@ $('view').addEventListener('click', e => {
       if (field !== 'veg') fields.veg = Math.min(p.veg, (fields.adults ?? p.adults) + (fields.kids ?? p.kids));
       return send({ type: 'updatePerson', id, fields });
     }
-    case 'weight': return send({ type: 'updatePerson', id, fields: { weight: Number(el.dataset.w) } });
-    case 'toggleSkip': return send({ type: 'updatePerson', id, fields: { skip: p.skip.includes(list) ? p.skip.filter(c => c !== list) : [...p.skip, list] } });
     case 'removePerson':
       if (confirm(`להסיר את ${p.name} מהסופ״ש?`)) send({ type: 'removePerson', id });
       return;

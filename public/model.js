@@ -10,7 +10,6 @@ export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'הצימר', other: '
 export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
 // Each section keeps free-text notes from earlier weekends.
 export const SECTIONS = [...LISTS, 'gear'];
-export const WEIGHTS = [0.5, 1, 1.5, 2];
 
 const LIMITS = { people: 40, items: 200, gear: 100, expenses: 300, past: 50 };
 const MAX_AMOUNT = 10_000_000; // agorot = ₪100,000
@@ -49,6 +48,9 @@ export function defaultState() {
 export function upgrade(s) {
   if (!s) return s;
   for (const g of s.gear ?? []) g.skipped ??= false;
+  // Everyone now splits equally: per-family weights and category opt-outs are gone.
+  for (const p of s.people ?? []) { delete p.weight; delete p.skip; }
+  for (const x of s.expenses ?? []) x.for ??= null;
   // Roles added later (first dinner) start empty, with their template list and notes.
   for (const k of LISTS) {
     if (s.buyers && !(k in s.buyers)) s.buyers[k] = null;
@@ -69,9 +71,8 @@ export function validState(s) {
   if (!Array.isArray(s.people) || s.people.length > LIMITS.people) return false;
   const people = new Set();
   for (const p of s.people) {
-    if (!onlyKeys(p, ['id', 'name', 'phone', 'coming', 'adults', 'kids', 'veg', 'weight', 'skip']) || !id(p.id) || people.has(p.id) || !name(p.name, 80) || !phone(p.phone)) return false;
-    if (!count(p.adults, 4) || p.adults < 1 || !count(p.kids, 10) || !count(p.veg, 14) || p.veg > p.adults + p.kids || !WEIGHTS.includes(p.weight) || !(p.coming === null || Object.hasOwn(COMING, p.coming))) return false;
-    if (!Array.isArray(p.skip) || !p.skip.every(c => LISTS.includes(c)) || new Set(p.skip).size !== p.skip.length) return false;
+    if (!onlyKeys(p, ['id', 'name', 'phone', 'coming', 'adults', 'kids', 'veg']) || !id(p.id) || people.has(p.id) || !name(p.name, 80) || !phone(p.phone)) return false;
+    if (!count(p.adults, 4) || p.adults < 1 || !count(p.kids, 10) || !count(p.veg, 14) || p.veg > p.adults + p.kids || !(p.coming === null || Object.hasOwn(COMING, p.coming))) return false;
     people.add(p.id);
   }
   const person = x => x === null || people.has(x);
@@ -98,7 +99,7 @@ export function validState(s) {
 
   if (!Array.isArray(s.expenses) || s.expenses.length > LIMITS.expenses) return false;
   for (const x of s.expenses) {
-    if (!onlyKeys(x, ['id', 'payer', 'amount', 'what', 'cat']) || !fresh(x.id) || !people.has(x.payer) || !amount(x.amount) || !name(x.what) || !CATEGORIES.includes(x.cat)) return false;
+    if (!onlyKeys(x, ['id', 'payer', 'amount', 'what', 'cat', 'for']) || !fresh(x.id) || !people.has(x.payer) || !person(x.for) || !amount(x.amount) || !name(x.what) || !CATEGORIES.includes(x.cat)) return false;
   }
 
   if (!Array.isArray(s.paid) || s.paid.length > 500 || !s.paid.every(k => text(k, 200))) return false;
@@ -135,14 +136,14 @@ export function applyOp(state, op) {
       break;
 
     case 'addPerson':
-      s.people.push({ id: op.id, name: str(op.name), phone: str(op.phone), coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0, weight: op.weight ?? 1, skip: [] });
+      s.people.push({ id: op.id, name: str(op.name), phone: str(op.phone), coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0 });
       break;
     case 'updatePerson':
-      Object.assign(find(s.people, op.id), pick(op.fields, ['name', 'phone', 'coming', 'adults', 'kids', 'veg', 'weight', 'skip']));
+      Object.assign(find(s.people, op.id), pick(op.fields, ['name', 'phone', 'coming', 'adults', 'kids', 'veg']));
       break;
     case 'removePerson':
       find(s.people, op.id);
-      if (s.expenses.some(x => x.payer === op.id)) fail('יש הוצאות על שמם - מחקו או העבירו אותן קודם');
+      if (s.expenses.some(x => x.payer === op.id || x.for === op.id)) fail('יש הוצאות על שמם - מחקו או העבירו אותן קודם');
       s.people = s.people.filter(p => p.id !== op.id);
       clearPerson(op.id);
       break;
@@ -180,10 +181,10 @@ export function applyOp(state, op) {
       break;
 
     case 'addExpense':
-      s.expenses.push({ id: op.id, payer: op.payer, amount: op.amount, what: str(op.what), cat: op.cat });
+      s.expenses.push({ id: op.id, payer: op.payer, amount: op.amount, what: str(op.what), cat: op.cat, for: op.for ?? null });
       break;
     case 'updateExpense':
-      Object.assign(find(s.expenses, op.id), pick(op.fields, ['payer', 'amount', 'what', 'cat']));
+      Object.assign(find(s.expenses, op.id), pick(op.fields, ['payer', 'amount', 'what', 'cat', 'for']));
       break;
     case 'removeExpense':
       find(s.expenses, op.id);
@@ -229,21 +230,18 @@ export const kids = s => coming(s).reduce((n, p) => n + p.kids, 0);
 export const veg = s => coming(s).reduce((n, p) => n + p.veg, 0);
 export const total = s => s.expenses.reduce((n, x) => n + x.amount, 0);
 
-// Who owes what. Like the group always did it: each family pays an equal share,
-// times its weight (e.g. ½ for someone coming alone), among the families that take
-// part in that expense's category. All money is in agorot to avoid rounding drift.
+// Who owes what. Like the group always does it: every expense is split equally between
+// the families that are coming, except one entered for a single family (say, the extra
+// for a pricier unit), which that family carries alone. Money is in agorot, so no drift.
 export function settle(s) {
   const balance = Object.fromEntries(s.people.map(p => [p.id, 0]));
   const share = Object.fromEntries(s.people.map(p => [p.id, 0]));
   for (const x of s.expenses) {
     balance[x.payer] += x.amount;
-    let members = payers(s).filter(p => !LISTS.includes(x.cat) || !p.skip.includes(x.cat));
-    if (!members.length) members = payers(s);
+    let members = x.for ? s.people.filter(p => p.id === x.for) : payers(s);
     if (!members.length) members = s.people.filter(p => p.id === x.payer);
-    // Weights are multiples of ½, so work in halves to keep everything in integers.
-    const units = members.reduce((n, p) => n + p.weight * 2, 0);
     let left = x.amount;
-    const parts = members.map(p => { const v = Math.floor(x.amount * p.weight * 2 / units); left -= v; return [p.id, v]; });
+    const parts = members.map(p => { const v = Math.floor(x.amount / members.length); left -= v; return [p.id, v]; });
     for (let i = 0; left > 0; i = (i + 1) % parts.length, left--) parts[i][1]++;
     for (const [pid, v] of parts) { share[pid] += v; balance[pid] -= v; }
   }
