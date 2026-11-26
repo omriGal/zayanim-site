@@ -12,7 +12,7 @@ const PORT = Number(process.env.PORT) || 8888;
 const CODE = 'local-dev-code-1234567890';
 const root = new URL('../public/', import.meta.url).pathname.replace(/^\/(\w:)/, '$1');
 const stores = { false: new MemoryStore(), true: new MemoryStore() };
-const env = { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(CODE).digest('hex') };
+const env = { SYNC_ENABLED: 'true', EDIT_CODE_SHA256: createHash('sha256').update(CODE).digest('hex'), GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID };
 const api = makeHandler({ storeFor: t => stores[t], env });
 // Photos: uploads stay in memory, otherwise fall back to photos/ on disk.
 const uploaded = new Map();
@@ -21,7 +21,7 @@ const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
-  if (url.pathname === '/api/list' || url.pathname === '/api/photo') {
+  if (['/api/list', '/api/login', '/api/photo'].includes(url.pathname)) {
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const r = await (url.pathname === '/api/photo' ? photo : api)(new Request(url, {

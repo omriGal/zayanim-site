@@ -3,6 +3,8 @@ import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, applyRo
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
 const CODE_KEY = 'zayanim-code' + (TEST ? '-test' : '');
+const SESSION_KEY = 'zayanim-session' + (TEST ? '-test' : '');
+const NONCE_KEY = 'zayanim-nonce';
 const TAB_KEY = 'zayanim-tab';
 const SHOP_KEY = 'zayanim-shop';
 const POLL_MS = 20_000;
@@ -27,6 +29,8 @@ const local = {
 };
 
 let code = '';
+let session = '';   // after Google sign-in, instead of the code
+const auth = () => code ? { 'X-Edit-Code': code } : { 'X-Session': session };
 let server = null;     // last document confirmed by the server
 let revision = null;
 let root = null;       // server document + edits not yet confirmed
@@ -44,7 +48,7 @@ async function api(method, body) {
   const r = await fetch(API, {
     method,
     cache: 'no-store',
-    headers: { 'X-Edit-Code': code, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { ...auth(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = {};
@@ -102,7 +106,7 @@ async function loadPhotos() {
   await Promise.all(Object.keys(SAYS).map(async name => {
     if (photos[name]) return;
     try {
-      const r = await fetch('/api/photo?name=' + name, { headers: { 'X-Edit-Code': code } });
+      const r = await fetch('/api/photo?name=' + name, { headers: auth() });
       if (r.ok) photos[name] = URL.createObjectURL(await r.blob());
     } catch { /* no photo, no cameo */ }
   }));
@@ -189,7 +193,7 @@ async function flush() {
 }
 
 async function refresh() {
-  if (!code || sending || queue.length) return;
+  if (!(code || session) || sending || queue.length) return;
   try {
     const data = await api('GET');
     offline = false;
@@ -207,19 +211,21 @@ window.addEventListener('beforeunload', e => { if (queue.length) e.preventDefaul
 
 // ---------- login ----------
 
-async function login(c) {
+// Either the group code or a session from Google sign-in.
+async function login(c, s = '') {
   code = c;
+  session = s;
   $('gateError').textContent = '';
   try {
     const data = await api('GET');
-    local.set(CODE_KEY, c);
+    if (code) local.set(CODE_KEY, code); else local.set(SESSION_KEY, session);
     $('gate').hidden = true;
     $('app').hidden = false;
     accept(data);
     loadPhotos().then(() => { render(); morning(); });
   } catch (e) {
-    if (e.status === 401) { local.del(CODE_KEY); code = ''; }
-    showGate(e.status === 401 ? 'הקוד לא נכון' : e.message);
+    if (e.status === 401) { local.del(CODE_KEY); local.del(SESSION_KEY); code = session = ''; }
+    showGate(e.status === 401 ? (s ? e.message : 'הקוד לא נכון') : e.message);
   }
 }
 
@@ -227,13 +233,46 @@ function showGate(error = '') {
   $('app').hidden = true;
   $('gate').hidden = false;
   $('gateError').textContent = error;
+  offerGoogle();
 }
 
 function logout(msg = '') {
   local.del(CODE_KEY);
-  code = '';
+  local.del(SESSION_KEY);
+  code = session = '';
   showGate(msg);
 }
+
+// Google sign-in: a full-page trip to Google and back, with the ID token in the #fragment.
+// The server checks it and that the email belongs to one of the families.
+let googleClient;
+async function offerGoogle() {
+  if (TEST || googleClient !== undefined) return;
+  try { googleClient = (await (await fetch('/api/login', { cache: 'no-store' })).json()).clientId || null; } catch { googleClient = null; }
+  $('googleBtn').hidden = $('gateOr').hidden = !googleClient;
+}
+
+function googleStart() {
+  const nonce = crypto.randomUUID();
+  try { sessionStorage.setItem(NONCE_KEY, nonce); } catch { /* checked on return */ }
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: googleClient, redirect_uri: location.origin + '/', response_type: 'id_token',
+    scope: 'openid email', nonce, prompt: 'select_account',
+  });
+}
+
+async function googleReturn(credential) {
+  let nonce = '';
+  try { nonce = sessionStorage.getItem(NONCE_KEY) || ''; sessionStorage.removeItem(NONCE_KEY); } catch { /* ignore */ }
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential, nonce }) });
+    const data = await r.json();
+    if (!r.ok) return showGate(data.error || 'הכניסה עם Google לא הצליחה');
+    login('', data.session);
+  } catch { showGate('אין חיבור לשרת, נסו שוב'); }
+}
+
+$('googleBtn').onclick = () => googleClient && googleStart();
 
 $('gateForm').addEventListener('submit', e => {
   e.preventDefault();
@@ -721,7 +760,7 @@ function menuDialog() {
     if (action === 'invite') inviteDialog();
     if (action === 'new') addEventDialog();
     if (action === 'share') shareLink();
-    if (action === 'logout' && confirm('לצאת? תצטרכו את הקוד כדי להיכנס שוב.')) logout();
+    if (action === 'logout' && confirm('לצאת? תצטרכו את הקוד או את Google כדי להיכנס שוב.')) logout();
   });
 }
 
@@ -757,9 +796,9 @@ function inviteDialog() {
 
 // The code rides in the #fragment, which browsers never send to the server.
 async function shareLink() {
-  const url = `${location.origin}/${TEST ? '?test=1' : ''}#k=${encodeURIComponent(code)}`;
+  const url = `${location.origin}/${TEST ? '?test=1' : ''}${code ? '#k=' + encodeURIComponent(code) : ''}`;
   const title = state?.event.title ?? 'זיינים וזיינות';
-  const text = `${title} - מי מגיע, תפקידים, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
+  const text = `${title} - מי מגיע, תפקידים, ציוד והתחשבנות. ${code ? 'הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏' : 'נכנסים עם חשבון ה-Google שלכם.'}`;
   if (navigator.share) {
     try { await navigator.share({ title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
@@ -911,7 +950,11 @@ $('view').addEventListener('click', e => {
 
 // ---------- start ----------
 
-const fromLink = new URLSearchParams(location.hash.slice(1)).get('k');
-if (fromLink) history.replaceState(null, '', location.pathname + location.search);
-const saved = fromLink || local.get(CODE_KEY);
-if (saved) login(saved); else showGate();
+const fragment = new URLSearchParams(location.hash.slice(1));
+const fromLink = fragment.get('k');
+if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+if (fragment.get('id_token')) googleReturn(fragment.get('id_token'));
+else if (fragment.get('error')) showGate('הכניסה עם Google בוטלה');
+else if (fromLink || local.get(CODE_KEY)) login(fromLink || local.get(CODE_KEY));
+else if (local.get(SESSION_KEY)) login('', local.get(SESSION_KEY));
+else showGate();
