@@ -263,6 +263,14 @@ function groupSummary() {
 const waNumber = ph => { const d = ph.replace(/\D/g, ''); return d.startsWith('0') ? '972' + d.slice(1) : d; };
 const familiesComing = n => n === 1 ? 'משפחה אחת מגיעה' : `${n} משפחות מגיעות`;
 
+// Each phone with call and WhatsApp links, each email as a mail link.
+function contactsLine(p) {
+  const phones = [p.phone, p.phone2].filter(Boolean).map(ph =>
+    `<span class="contact-item"><a href="tel:${esc(ph.replace(/[ -]/g, ''))}">☎ ${esc(ph)}</a><a class="wa" href="https://wa.me/${esc(waNumber(ph))}" target="_blank" rel="noopener">וואטסאפ</a></span>`);
+  const mails = [p.email, p.email2].filter(Boolean).map(m => `<span class="contact-item"><a href="mailto:${esc(m)}" dir="ltr">${esc(m)}</a></span>`);
+  return phones.length || mails.length ? `<div class="contacts">${[...phones, ...mails].join('')}</div>` : '';
+}
+
 let toastTimer;
 function toast(msg) {
   const t = $('toast');
@@ -520,9 +528,10 @@ function peopleView() {
       <div class="person ${p.coming === 'no' ? 'not-coming' : ''}">
         <div class="person-head">
           <button class="title" data-act="editPerson" data-id="${p.id}">${esc(p.name)}</button>
-          ${p.phone ? `<a class="contact" href="tel:${esc(p.phone.replace(/[ -]/g, ''))}" aria-label="התקשרות">☎</a><a class="contact" href="https://wa.me/${esc(waNumber(p.phone))}" target="_blank" rel="noopener" aria-label="וואטסאפ">✉</a>` : `<button class="pill" data-act="editPerson" data-id="${p.id}">+ טלפון</button>`}
+          ${[p.phone, p.phone2, p.email, p.email2].some(Boolean) ? '' : `<button class="pill" data-act="editPerson" data-id="${p.id}">+ פרטי קשר</button>`}
           <button class="x" data-act="removePerson" data-id="${p.id}" aria-label="מחיקה">×</button>
         </div>
+        ${contactsLine(p)}
         <div class="rsvp">${Object.entries(COMING).map(([v, label]) =>
           `<button class="pill ${p.coming === v ? (v === 'yes' ? 'on' : 'off') : ''}" data-act="coming" data-id="${p.id}" data-v="${v}">${label}</button>`).join('')}
           ${p.coming === null ? '<span class="small" style="color:var(--fire)">עוד לא ענו</span>' : ''}</div>
@@ -758,8 +767,11 @@ $('view').addEventListener('click', e => {
       return openDialog(`<h3>${esc(p.name)}</h3>
         <label>שם</label><input type="text" name="name" value="${esc(p.name)}" maxlength="80" required>
         <label>טלפון</label><input type="tel" name="phone" value="${esc(p.phone)}" maxlength="20" placeholder="050-0000000" inputmode="tel" pattern="\\+?[0-9 \\-]{7,20}">
+        <label>טלפון נוסף</label><input type="tel" name="phone2" value="${esc(p.phone2)}" maxlength="20" placeholder="050-0000000" inputmode="tel" pattern="\\+?[0-9 \\-]{7,20}">
+        <label>אימייל</label><input type="email" name="email" value="${esc(p.email)}" maxlength="120" dir="ltr">
+        <label>אימייל נוסף</label><input type="email" name="email2" value="${esc(p.email2)}" maxlength="120" dir="ltr">
         <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
-      d => send({ type: 'updatePerson', id, fields: { name: d.name.trim(), phone: d.phone.trim() } }));
+      d => send({ type: 'updatePerson', id, fields: { name: d.name.trim(), phone: d.phone.trim(), phone2: d.phone2.trim(), email: d.email.trim(), email2: d.email2.trim() } }));
     case 'step': {
       const field = el.dataset.field;
       const fields = { [field]: p[field] + Number(el.dataset.d) };

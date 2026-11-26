@@ -24,6 +24,9 @@ const amount = x => Number.isInteger(x) && x > 0 && x <= MAX_AMOUNT;
 const count = (x, max) => Number.isInteger(x) && x >= 0 && x <= max;
 const url = x => x === '' || (text(x, 300) && /^https:\/\//.test(x));
 const phone = x => x === '' || (typeof x === 'string' && /^\+?[0-9 -]{7,20}$/.test(x));
+const email = x => x === '' || (typeof x === 'string' && x.length <= 120 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(x));
+// Each family can have two of each: usually one per partner.
+export const CONTACT_FIELDS = ['phone', 'phone2', 'email', 'email2'];
 
 export function newId() {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 16);
@@ -49,7 +52,7 @@ export function upgrade(s) {
   if (!s) return s;
   for (const g of s.gear ?? []) g.skipped ??= false;
   // Everyone now splits equally: per-family weights and category opt-outs are gone.
-  for (const p of s.people ?? []) { delete p.weight; delete p.skip; }
+  for (const p of s.people ?? []) { delete p.weight; delete p.skip; for (const k of CONTACT_FIELDS) p[k] ??= ''; }
   for (const x of s.expenses ?? []) x.for ??= null;
   // Roles added later (first dinner) start empty, with their template list and notes.
   for (const k of LISTS) {
@@ -71,7 +74,8 @@ export function validState(s) {
   if (!Array.isArray(s.people) || s.people.length > LIMITS.people) return false;
   const people = new Set();
   for (const p of s.people) {
-    if (!onlyKeys(p, ['id', 'name', 'phone', 'coming', 'adults', 'kids', 'veg']) || !id(p.id) || people.has(p.id) || !name(p.name, 80) || !phone(p.phone)) return false;
+    if (!onlyKeys(p, ['id', 'name', ...CONTACT_FIELDS, 'coming', 'adults', 'kids', 'veg']) || !id(p.id) || people.has(p.id) || !name(p.name, 80)) return false;
+    if (!phone(p.phone) || !phone(p.phone2) || !email(p.email) || !email(p.email2)) return false;
     if (!count(p.adults, 4) || p.adults < 1 || !count(p.kids, 10) || !count(p.veg, 14) || p.veg > p.adults + p.kids || !(p.coming === null || Object.hasOwn(COMING, p.coming))) return false;
     people.add(p.id);
   }
@@ -136,10 +140,10 @@ export function applyOp(state, op) {
       break;
 
     case 'addPerson':
-      s.people.push({ id: op.id, name: str(op.name), phone: str(op.phone), coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0 });
+      s.people.push({ id: op.id, name: str(op.name), phone: str(op.phone), phone2: '', email: '', email2: '', coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0 });
       break;
     case 'updatePerson':
-      Object.assign(find(s.people, op.id), pick(op.fields, ['name', 'phone', 'coming', 'adults', 'kids', 'veg']));
+      Object.assign(find(s.people, op.id), pick(op.fields, ['name', ...CONTACT_FIELDS, 'coming', 'adults', 'kids', 'veg']));
       break;
     case 'removePerson':
       find(s.people, op.id);
