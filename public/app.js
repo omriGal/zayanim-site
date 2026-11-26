@@ -9,7 +9,8 @@ const POLL_MS = 20_000;
 
 const icon = paths => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 const TABS = [
-  { id: 'home', label: 'מסלול', icon: icon('<path d="M12 3c1.2 3 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-2.1 1-3.4 2.2-4.4 0 2 .9 3.1 2.1 3.3-.4-3 .1-5.2.2-7.5z"/><path d="M5 21h14M8 18l-1.5 3M16 18l1.5 3"/>') },
+  { id: 'events', label: 'דף הבית', icon: icon('<path d="M3 11 12 3.5l9 7.5"/><path d="M5.5 9.5V20.5h13V9.5"/><path d="M10 20.5v-6h4v6"/>') },
+  { id: 'home', label: 'האירוע', icon: icon('<path d="M12 3c1.2 3 4.5 4.6 4.5 8.6a4.5 4.5 0 0 1-9 0c0-2.1 1-3.4 2.2-4.4 0 2 .9 3.1 2.1 3.3-.4-3 .1-5.2.2-7.5z"/><path d="M5 21h14M8 18l-1.5 3M16 18l1.5 3"/>') },
   { id: 'shop', label: 'תפקידים', icon: icon('<path d="M3 9.5h18l-2 10.5H5z"/><path d="M8 9.5 11 4M16 9.5 13 4M9 13.5v3M15 13.5v3M12 13.5v3"/>') },
   { id: 'gear', label: 'ציוד', icon: icon('<path d="M12 4 2.5 20h19z"/><path d="M12 4v16M8.5 20 12 13.5 15.5 20"/>') },
   { id: 'money', label: 'חשבון', icon: icon('<path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 11.5h6M9 15h3"/>') },
@@ -401,7 +402,7 @@ function homeView() {
       ? `<p><b>${familiesComing(yes)}</b>${noAnswer.length ? ` · <b>${noAnswer.length}</b> עוד לא ענו` : ''}${yes ? ` · ${adults(state)} מבוגרים${kids(state) ? `, ${kids(state)} ילדים` : ''}` : ''}</p>
          ${noAnswer.length ? `<p class="small muted">מחכים ל: ${noAnswer.map(p => esc(p.name)).join(', ')}</p>` : ''}`
       : '<p>עוד אין משפחות ברשימה</p>',
-    `<button class="btn sm" data-act="goPeople">${state.people.length ? 'עדכון מי מגיע' : 'הוספת משפחות'}</button>`)}
+    `<button class="btn sm" data-act="goPeople">${state.people.length ? 'עדכון מי מגיע' : 'הוספת משפחות'}</button>${state.people.length ? ' <button class="btn sm fire" data-act="invite">📨 זימון לכולם</button>' : ''}`)}
   ${step(3, !rolesOpen, 'מחלקים תפקידים',
     `<div class="roles">${LISTS.map((k, i) => `
       <label class="role"><span><i>${i + 1}</i>${esc(LIST_LABELS[k])}</span>
@@ -707,7 +708,8 @@ function menuDialog() {
   openDialog(`<h3>תפריט</h3>
     <div class="menu-list">
       ${state ? '<button class="btn" value="event">פרטי האירוע: תאריכים, מקום, צ׳ק אין</button>' : ''}
-      ${state ? '<button class="btn" value="events">כל האירועים</button>' : ''}
+      ${state ? '<button class="btn" value="invite">📨 זימון לכולם לאירוע</button>' : ''}
+      ${state ? '<button class="btn" value="events">דף הבית - כל האירועים</button>' : ''}
       <button class="btn" value="new">+ אירוע חדש</button>
       <button class="btn" value="share">שליחת קישור לקבוצה</button>
       <button class="btn" value="logout">יציאה מהמכשיר הזה</button>
@@ -716,10 +718,41 @@ function menuDialog() {
   (d, action) => {
     if (action === 'event') eventDialog();
     if (action === 'events') openEvent(null);
+    if (action === 'invite') inviteDialog();
     if (action === 'new') addEventDialog();
     if (action === 'share') shareLink();
     if (action === 'logout' && confirm('לצאת? תצטרכו את הקוד כדי להיכנס שוב.')) logout();
   });
+}
+
+// Invite every family to this event: a Google Calendar event with everyone as guests (Google
+// emails the invitations when it's saved), a plain email to everyone, or a WhatsApp message.
+function inviteDialog() {
+  const e = state.event;
+  const emails = [...new Set(state.people.flatMap(p => [p.email, p.email2]).filter(Boolean))];
+  const site = location.origin + (TEST ? '/?test=1' : '/');
+  const when = e.date ? eventWhen(e).replace(/ · .*$/, '') : '';
+  const text = [e.title, when && `מתי: ${when}`, e.place && `איפה: ${e.place}`, e.checkin, e.link].filter(Boolean)
+    .concat('', 'מאשרים הגעה, תפקידים וציוד באתר:', site).join(String.fromCharCode(10));
+  const ymd = d => d.replaceAll('-', '');
+  const after = d => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); };
+  const cal = e.date ? 'https://calendar.google.com/calendar/render?' + new URLSearchParams({
+    action: 'TEMPLATE', text: e.title, dates: `${ymd(e.date)}/${ymd(after(e.end || e.date))}`,
+    location: e.place || '', details: text, add: emails.join(','),
+  }) : '';
+  const mail = `mailto:?bcc=${emails.map(encodeURIComponent).join(',')}&subject=${encodeURIComponent('זימון: ' + e.title)}&body=${encodeURIComponent(text)}`;
+  const missing = state.people.filter(p => !p.email && !p.email2).map(p => p.name);
+  openDialog(`<h3>זימון לכולם</h3>
+    <p class="small muted" style="margin-top:0">${emails.length} כתובות מייל מ-${state.people.length} משפחות${missing.length ? ` · בלי מייל: ${esc(missing.join(', '))}` : ''}</p>
+    <div class="menu-list">
+      ${cal ? `<a class="btn fire" href="${esc(cal)}" target="_blank" rel="noopener">📅 זימון ביומן גוגל לכולם</a>
+      <p class="small muted" style="margin:-4px 0 0">נפתח אירוע ביומן שלך עם כולם כמוזמנים. לוחצים "שמירה" ו"שליחה" וכל אחד מקבל זימון במייל.</p>` : '<p class="small">קודם קובעים תאריך בפרטי האירוע.</p>'}
+      <a class="btn" href="${esc(mail)}">✉️ מייל לכולם</a>
+      <a class="btn" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">💬 הודעה לקבוצת הוואטסאפ</a>
+      <button class="btn" type="button" id="copyInvite">העתקת הטקסט</button>
+    </div>
+    <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`);
+  $('copyInvite').onclick = () => copyText(text);
 }
 
 // The code rides in the #fragment, which browsers never send to the server.
@@ -758,6 +791,7 @@ $('moneyChip').onclick = () => goTab('money');
 $('tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]');
   if (!b) return;
+  if (b.dataset.tab === 'events') return openEvent(null);
   goTab(b.dataset.tab);
   refresh();
   showCameo(pickCameo(tab === 'shop' ? shopList : ''));
@@ -804,6 +838,7 @@ $('view').addEventListener('click', e => {
     case 'goPeople': return goTab('people');
     case 'goTab': return goTab(el.dataset.tab);
     case 'editEvent': return eventDialog();
+    case 'invite': return inviteDialog();
     case 'editNotes': {
       const section = el.dataset.section;
       return openDialog(`<h3>הערות מהפעמים הקודמות</h3>

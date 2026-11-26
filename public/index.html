@@ -185,7 +185,7 @@ ul.rows { list-style: none; margin: 0; padding: 0; }
 
 /* ---------- bottom bar ---------- */
 nav.tabs { position: fixed; bottom: 0; left: 0; right: 0; z-index: 5; background: var(--night); border-top: 2px solid var(--ink); padding-bottom: calc(var(--badge) + env(safe-area-inset-bottom)); }
-nav.tabs .inner { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px 4px; gap: 4px; }
+nav.tabs .inner { max-width: 680px; margin: 0 auto; display: grid; grid-template-columns: repeat(6, 1fr); padding: 6px 4px 4px; gap: 2px; }
 nav.tabs button { border: 0; background: none; color: #f5e9c8aa; padding: 6px 2px 5px; display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; font-weight: 500; border-radius: 4px; }
 nav.tabs svg { width: 24px; height: 24px; }
 nav.tabs button.on { background: var(--fire); color: var(--sheet); box-shadow: inset 0 0 0 2px var(--ink); }
@@ -205,7 +205,9 @@ dialog label { display: block; font-size: 13px; font-weight: 700; margin: 12px 0
 dialog .actions { display: flex; gap: 8px; margin-top: 20px; }
 dialog .actions .btn { flex: 1; }
 .menu-list { display: grid; gap: 10px; }
-.menu-list .btn { text-align: right; font-weight: 500; display: flex; gap: 10px; align-items: center; }
+a.btn { text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; justify-content: center; }
+a.btn.fire { color: var(--sheet); }
+.menu-list .btn { justify-content: flex-start; text-align: right; font-weight: 500; display: flex; gap: 10px; align-items: center; }
 
 /* ---------- planning screens ---------- */
 .place { margin-top: 8px; font-size: 14px; color: #f5e9c8cc; }
@@ -345,7 +347,7 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
         <button class="menu-btn" id="menuBtn" aria-label="תפריט"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
       </div>
       <div class="chips">
-        <button class="chip back" id="eventsChip">↩ כל האירועים</button>
+        <button class="chip back" id="eventsChip">⌂ דף הבית</button>
         <button class="chip" id="peopleChip"></button>
         <button class="chip num" id="moneyChip"></button>
       </div>
