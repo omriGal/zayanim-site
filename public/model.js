@@ -1,18 +1,28 @@
-// Shared data model for the weekend: used by both the page and the server,
-// so validation, edits and the settlement math are identical on both sides.
-import { LISTS_TEMPLATE, GEAR_TEMPLATE, NOTES_TEMPLATE, PLACE } from './template.js';
+// Shared data model: used by both the page and the server, so validation, edits and the
+// settlement math are identical on both sides.
+//
+// The saved document ("root") holds the group's families once, and a list of events
+// (the May zimmer weekend, the December dads-and-kids camping, ...). Each event has its
+// own attendance, roles, lists, gear, notes and expenses. The page works on one event at
+// a time through view(root, eventId), which looks like a single weekend with the families
+// in it; edits go through applyRootOp, which applies them to that view and writes back.
+import { LISTS_TEMPLATE, GEAR_TEMPLATE, NOTES_TEMPLATE, PLACE, CAMPING_GEAR, CAMPING_NOTES } from './template.js';
 
 // The jobs the group hands out every time, in the order they are handed out.
 export const LISTS = ['meat', 'alcohol', 'general', 'breakfast', 'dinner'];
 export const LIST_LABELS = { meat: 'מנגל', alcohol: 'אלכוהול', general: 'קניות כלליות', breakfast: 'ארוחת בוקר', dinner: 'ארוחת ערב ראשונה' };
 export const CATEGORIES = [...LISTS, 'lodging', 'other'];
-export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'הצימר', other: 'אחר' };
+export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'לינה', other: 'אחר' };
 export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
-// Each section keeps free-text notes from earlier weekends.
+export const KINDS = { zimmer: 'סופ״ש בצימרים', camping: 'קמפינג אבות וילדים' };
+// Each section keeps free-text notes from earlier events.
 export const SECTIONS = [...LISTS, 'gear'];
+// Each family can have two of each: usually one per partner.
+export const CONTACT_FIELDS = ['phone', 'phone2', 'email', 'email2'];
+const SIZE_FIELDS = ['adults', 'kids', 'veg'];
 
-const LIMITS = { people: 40, items: 200, gear: 100, expenses: 300, past: 50 };
-const MAX_AMOUNT = 10_000_000; // agorot = ₪100,000
+const LIMITS = { people: 40, events: 30, items: 200, gear: 100, expenses: 300 };
+const MAX_AMOUNT = 100_000_000; // agorot = ₪1,000,000
 
 const plain = x => x !== null && typeof x === 'object' && !Array.isArray(x);
 const onlyKeys = (x, allowed) => plain(x) && Object.keys(x).every(k => allowed.includes(k));
@@ -25,56 +35,84 @@ const count = (x, max) => Number.isInteger(x) && x >= 0 && x <= max;
 const url = x => x === '' || (text(x, 300) && /^https:\/\//.test(x));
 const phone = x => x === '' || (typeof x === 'string' && /^\+?[0-9 -]{7,20}$/.test(x));
 const email = x => x === '' || (typeof x === 'string' && x.length <= 120 && /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(x));
-// Each family can have two of each: usually one per partner.
-export const CONTACT_FIELDS = ['phone', 'phone2', 'email', 'email2'];
+const fail = msg => { throw new Error(msg); };
+const pick = (src, allowed) => Object.fromEntries(Object.entries(src || {}).filter(([k]) => allowed.includes(k)));
+const str = x => String(x ?? '').trim();
 
 export function newId() {
   return crypto.randomUUID().replaceAll('-', '').slice(0, 16);
 }
 
-export function defaultState() {
+// Nights between the first and last day, e.g. Thursday to Saturday = 2.
+export function nights(event) {
+  if (!event.date || !event.end) return 0;
+  return Math.max(0, Math.round((new Date(event.end + 'T12:00') - new Date(event.date + 'T12:00')) / 86_400_000));
+}
+
+// ---------- one event ----------
+
+function newEvent({ id: eid = newId(), kind = 'zimmer', title, date: start = '', end = '', place = '', link = '', checkin = '', notes = '' }) {
+  const camping = kind === 'camping';
   return {
-    version: 5,
-    event: { id: newId(), title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: PLACE.place, link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: PLACE.checkin, notes: PLACE.details.join('\n') },
-    people: [],
+    event: { id: eid, kind, title, date: start, end, place, link, checkin, notes },
+    attend: {},
     buyers: Object.fromEntries(LISTS.map(k => [k, null])),
     lists: Object.fromEntries(LISTS.map(k => [k, LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }))])),
-    gear: GEAR_TEMPLATE.map(name => ({ id: newId(), name, who: null, done: false, skipped: false })),
-    notes: Object.fromEntries(SECTIONS.map(k => [k, NOTES_TEMPLATE[k].join('\n')])),
+    gear: (camping ? CAMPING_GEAR : GEAR_TEMPLATE).map(n => ({ id: newId(), name: n, who: null, done: false, skipped: false })),
+    notes: Object.fromEntries(SECTIONS.map(k => [k, ((camping ? CAMPING_NOTES[k] : NOTES_TEMPLATE[k]) ?? []).join('\n')])),
     expenses: [],
     paid: [],
-    past: [],
   };
 }
 
-// Fills in fields added after a weekend was first saved, so older saved data stays valid.
-export function upgrade(s) {
-  if (!s) return s;
-  for (const g of s.gear ?? []) g.skipped ??= false;
-  // Everyone now splits equally: per-family weights and category opt-outs are gone.
-  for (const p of s.people ?? []) { delete p.weight; delete p.skip; for (const k of CONTACT_FIELDS) p[k] ??= ''; }
-  for (const x of s.expenses ?? []) x.for ??= null;
-  // Roles added later (first dinner) start empty, with their template list and notes.
-  for (const k of LISTS) {
-    if (s.buyers && !(k in s.buyers)) s.buyers[k] = null;
-    if (s.lists && !s.lists[k]) s.lists[k] = LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }));
-    if (s.notes && !(k in s.notes)) s.notes[k] = NOTES_TEMPLATE[k].join('\n');
-  }
-  // The next zimmer's details arrived after the weekend was first saved.
-  const e = s.event;
-  if (e && e.place === 'טרה קוטה' && !e.notes) Object.assign(e, { place: PLACE.place, checkin: e.checkin || PLACE.checkin, notes: PLACE.details.join('\n') });
-  return s;
+const MAY = () => newEvent({
+  title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', end: '2027-05-22', place: PLACE.place,
+  link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: PLACE.checkin, notes: PLACE.details.join('\n'),
+});
+
+export function defaultRoot() {
+  return { version: 6, people: [], events: [MAY()] };
+}
+
+// One event as the page sees it: the event's own parts, plus every family with its answer
+// and its size for this event.
+export function view(root, eventId) {
+  const e = root.events.find(x => x.event.id === eventId);
+  if (!e) return null;
+  return {
+    event: e.event,
+    people: root.people.map(p => ({ ...p, coming: null, ...e.attend[p.id] })),
+    buyers: e.buyers, lists: e.lists, gear: e.gear, notes: e.notes, expenses: e.expenses, paid: e.paid,
+  };
+}
+
+// The starting weekend as a view, for tests and the first visit.
+export function defaultState() {
+  const root = defaultRoot();
+  return view(root, root.events[0].event.id);
+}
+
+function writeBack(root, w) {
+  const e = root.events.find(x => x.event.id === w.event.id);
+  const base = Object.fromEntries(root.people.map(p => [p.id, p]));
+  root.people = w.people.map(p => ({
+    ...(base[p.id] ?? pick(p, SIZE_FIELDS)),
+    id: p.id, name: p.name, ...pick(p, CONTACT_FIELDS),
+  }));
+  e.attend = Object.fromEntries(w.people.map(p => [p.id, { coming: p.coming, ...pick(p, SIZE_FIELDS) }]));
+  Object.assign(e, { event: w.event, buyers: w.buyers, lists: w.lists, gear: w.gear, notes: w.notes, expenses: w.expenses, paid: w.paid });
 }
 
 export function validState(s) {
-  if (!onlyKeys(s, ['version', 'event', 'people', 'buyers', 'lists', 'gear', 'notes', 'expenses', 'paid', 'past']) || s.version !== 5) return false;
+  if (!onlyKeys(s, ['event', 'people', 'buyers', 'lists', 'gear', 'notes', 'expenses', 'paid'])) return false;
   const e = s.event;
-  if (!onlyKeys(e, ['id', 'title', 'date', 'place', 'link', 'checkin', 'notes']) || !id(e.id) || !name(e.title) || !date(e.date) || !text(e.place, 120) || !url(e.link) || !text(e.checkin, 120) || !text(e.notes, 2000)) return false;
+  if (!onlyKeys(e, ['id', 'kind', 'title', 'date', 'end', 'place', 'link', 'checkin', 'notes']) || !id(e.id) || !Object.hasOwn(KINDS, e.kind) || !name(e.title)) return false;
+  if (!date(e.date) || !date(e.end) || (e.date && e.end && e.end < e.date) || !text(e.place, 120) || !url(e.link) || !text(e.checkin, 120) || !text(e.notes, 2000)) return false;
 
   if (!Array.isArray(s.people) || s.people.length > LIMITS.people) return false;
   const people = new Set();
   for (const p of s.people) {
-    if (!onlyKeys(p, ['id', 'name', ...CONTACT_FIELDS, 'coming', 'adults', 'kids', 'veg']) || !id(p.id) || people.has(p.id) || !name(p.name, 80)) return false;
+    if (!onlyKeys(p, ['id', 'name', ...CONTACT_FIELDS, 'coming', ...SIZE_FIELDS]) || !id(p.id) || people.has(p.id) || !name(p.name, 80)) return false;
     if (!phone(p.phone) || !phone(p.phone2) || !email(p.email) || !email(p.email2)) return false;
     if (!count(p.adults, 4) || p.adults < 1 || !count(p.kids, 10) || !count(p.veg, 14) || p.veg > p.adults + p.kids || !(p.coming === null || Object.hasOwn(COMING, p.coming))) return false;
     people.add(p.id);
@@ -101,31 +139,23 @@ export function validState(s) {
 
   if (!onlyKeys(s.notes, SECTIONS) || !SECTIONS.every(k => text(s.notes[k], 3000))) return false;
 
+  // payer null = a known cost nobody has paid yet (say, the zimmer before booking).
   if (!Array.isArray(s.expenses) || s.expenses.length > LIMITS.expenses) return false;
   for (const x of s.expenses) {
-    if (!onlyKeys(x, ['id', 'payer', 'amount', 'what', 'cat', 'for']) || !fresh(x.id) || !people.has(x.payer) || !person(x.for) || !amount(x.amount) || !name(x.what) || !CATEGORIES.includes(x.cat)) return false;
+    if (!onlyKeys(x, ['id', 'payer', 'amount', 'what', 'calc', 'cat', 'for']) || !fresh(x.id) || !person(x.payer) || !person(x.for) || !amount(x.amount) || !name(x.what) || !text(x.calc, 80) || !CATEGORIES.includes(x.cat)) return false;
   }
 
   if (!Array.isArray(s.paid) || s.paid.length > 500 || !s.paid.every(k => text(k, 200))) return false;
-
-  if (!Array.isArray(s.past) || s.past.length > LIMITS.past) return false;
-  for (const p of s.past) {
-    if (!onlyKeys(p, ['id', 'title', 'date', 'place', 'total', 'families']) || !id(p.id) || !name(p.title) || !date(p.date) || !text(p.place, 120)) return false;
-    if (!Number.isInteger(p.total) || p.total < 0 || !Number.isInteger(p.families) || p.families < 0) return false;
-  }
   return true;
 }
 
 // Each edit is a small operation, so two friends editing at once never
 // overwrite each other: the server re-applies the operation to the latest list.
-// Returns the new state, or throws an Error with a Hebrew message.
+// Works on one event's view; returns the new view, or throws an Error with a Hebrew message.
 export function applyOp(state, op) {
   const s = structuredClone(state);
-  const fail = msg => { throw new Error(msg); };
   const list = k => LISTS.includes(k) ? s.lists[k] : fail('רשימה לא מוכרת');
   const find = (arr, x) => arr.find(v => v.id === x) || fail('הפריט כבר לא קיים - כנראה מישהו מחק אותו');
-  const pick = (src, allowed) => Object.fromEntries(Object.entries(src || {}).filter(([k]) => allowed.includes(k)));
-  const str = x => String(x ?? '').trim();
   const clearPerson = pid => {
     for (const k of LISTS) {
       if (s.buyers[k] === pid) s.buyers[k] = null;
@@ -136,14 +166,14 @@ export function applyOp(state, op) {
 
   switch (op?.type) {
     case 'setEvent':
-      Object.assign(s.event, pick(op.fields, ['title', 'date', 'place', 'link', 'checkin', 'notes']));
+      Object.assign(s.event, pick(op.fields, ['title', 'date', 'end', 'place', 'link', 'checkin', 'notes']));
       break;
 
     case 'addPerson':
       s.people.push({ id: op.id, name: str(op.name), phone: str(op.phone), phone2: '', email: '', email2: '', coming: op.coming ?? null, adults: op.adults ?? 2, kids: op.kids ?? 0, veg: 0 });
       break;
     case 'updatePerson':
-      Object.assign(find(s.people, op.id), pick(op.fields, ['name', ...CONTACT_FIELDS, 'coming', 'adults', 'kids', 'veg']));
+      Object.assign(find(s.people, op.id), pick(op.fields, ['name', ...CONTACT_FIELDS, 'coming', ...SIZE_FIELDS]));
       break;
     case 'removePerson':
       find(s.people, op.id);
@@ -185,10 +215,10 @@ export function applyOp(state, op) {
       break;
 
     case 'addExpense':
-      s.expenses.push({ id: op.id, payer: op.payer, amount: op.amount, what: str(op.what), cat: op.cat, for: op.for ?? null });
+      s.expenses.push({ id: op.id, payer: op.payer ?? null, amount: op.amount, what: str(op.what), calc: str(op.calc), cat: op.cat, for: op.for ?? null });
       break;
     case 'updateExpense':
-      Object.assign(find(s.expenses, op.id), pick(op.fields, ['payer', 'amount', 'what', 'cat', 'for']));
+      Object.assign(find(s.expenses, op.id), pick(op.fields, ['payer', 'amount', 'what', 'calc', 'cat', 'for']));
       break;
     case 'removeExpense':
       find(s.expenses, op.id);
@@ -202,23 +232,6 @@ export function applyOp(state, op) {
       break;
     }
 
-    // Close this weekend and start the next one: same families, lists, gear and notes,
-    // nobody confirmed, nothing bought or assigned yet, no expenses.
-    case 'newEvent': {
-      const old = s.event;
-      s.past.unshift({ id: old.id, title: old.title, date: old.date, place: old.place, total: total(s), families: payers(s).length });
-      s.past = s.past.slice(0, LIMITS.past);
-      s.event = { id: op.id, title: str(op.title), date: op.date ?? '', place: str(op.place), link: '', checkin: '', notes: '' };
-      for (const k of LISTS) for (const it of s.lists[k]) { it.done = false; it.who = null; }
-      // 'Not needed this time' only lasts one weekend.
-      for (const g of s.gear) { g.done = false; g.who = null; g.skipped = false; }
-      for (const p of s.people) p.coming = null;
-      s.buyers = Object.fromEntries(LISTS.map(k => [k, null]));
-      s.expenses = [];
-      s.paid = [];
-      break;
-    }
-
     default:
       fail('פעולה לא מוכרת');
   }
@@ -226,28 +239,134 @@ export function applyOp(state, op) {
   return s;
 }
 
+// ---------- the whole document ----------
+
+export function validRoot(r) {
+  if (!onlyKeys(r, ['version', 'people', 'events']) || r.version !== 6) return false;
+  if (!Array.isArray(r.people) || !Array.isArray(r.events) || r.events.length > LIMITS.events) return false;
+  for (const p of r.people) if (!onlyKeys(p, ['id', 'name', ...CONTACT_FIELDS, ...SIZE_FIELDS])) return false;
+  const seen = new Set();
+  for (const e of r.events) {
+    if (!onlyKeys(e, ['event', 'attend', 'buyers', 'lists', 'gear', 'notes', 'expenses', 'paid']) || !plain(e.attend)) return false;
+    if (seen.has(e.event?.id)) return false;
+    seen.add(e.event?.id);
+    for (const [pid, a] of Object.entries(e.attend)) {
+      if (!r.people.some(p => p.id === pid) || !onlyKeys(a, ['coming', ...SIZE_FIELDS])) return false;
+    }
+    if (!validState(view(r, e.event.id))) return false;
+  }
+  return true;
+}
+
+// Edits to the whole document: adding or removing an event, or any edit to one event
+// (op.event says which). Families are shared, so removing one touches every event.
+export function applyRootOp(root, op) {
+  const r = structuredClone(root);
+  switch (op?.type) {
+    case 'addEvent': {
+      if (!Object.hasOwn(KINDS, op.kind)) fail('סוג אירוע לא מוכר');
+      const e = newEvent({ id: op.id, kind: op.kind, title: str(op.title), date: op.date ?? '', end: op.end ?? '', place: str(op.place) });
+      // Dads and kids: one adult per family to start with.
+      if (op.kind === 'camping') e.attend = Object.fromEntries(r.people.map(p => [p.id, { coming: null, adults: 1, kids: p.kids, veg: 0 }]));
+      r.events.push(e);
+      break;
+    }
+    case 'removeEvent': {
+      const e = r.events.find(x => x.event.id === op.event) || fail('האירוע כבר לא קיים');
+      if (e.expenses.length) fail('יש באירוע הוצאות - מחקו אותן קודם');
+      if (r.events.length === 1) fail('זה האירוע האחרון');
+      r.events = r.events.filter(x => x !== e);
+      break;
+    }
+    case 'removePerson':
+      // The family leaves every event, so check them all before touching any.
+      for (const e of r.events) if (e.expenses.some(x => x.payer === op.id || x.for === op.id)) fail(`יש להם הוצאות ב"${e.event.title}" - מחקו או העבירו אותן קודם`);
+      if (!r.people.some(p => p.id === op.id)) fail('המשפחה כבר לא ברשימה');
+      for (const e of r.events) {
+        const w = applyOp(view(r, e.event.id), op);
+        Object.assign(e, { buyers: w.buyers, lists: w.lists, gear: w.gear });
+        delete e.attend[op.id];
+      }
+      r.people = r.people.filter(p => p.id !== op.id);
+      break;
+    default: {
+      const w = view(r, op?.event) || fail('האירוע כבר לא קיים');
+      writeBack(r, applyOp(w, op));
+    }
+  }
+  if (!validRoot(r)) fail('הנתונים לא תקינים');
+  return r;
+}
+
+// Saved data from before events were separate: the single weekend becomes the first event.
+export function migrate(saved) {
+  if (saved?.version === 6) return upgrade(saved);
+  const w = upgradeWeekend(saved);
+  const root = { version: 6, people: [], events: [] };
+  const e = newEvent({ ...w.event, kind: 'zimmer', end: w.event.date ? addDays(w.event.date, 2) : '' });
+  Object.assign(e, { buyers: w.buyers, lists: w.lists, gear: w.gear, notes: w.notes, expenses: w.expenses, paid: w.paid });
+  root.people = w.people.map(p => ({ id: p.id, name: p.name, ...pick(p, CONTACT_FIELDS), ...pick(p, SIZE_FIELDS) }));
+  e.attend = Object.fromEntries(w.people.map(p => [p.id, { coming: p.coming ?? null, ...pick(p, SIZE_FIELDS) }]));
+  root.events.push(e);
+  return root;
+}
+
+// Fills in fields added after a document was first saved.
+export function upgrade(root) {
+  for (const e of root?.events ?? []) for (const x of e.expenses) x.calc ??= '';
+  return root;
+}
+
+const addDays = (d, n) => { const t = new Date(d + 'T12:00'); t.setDate(t.getDate() + n); return t.toISOString().slice(0, 10); };
+
+// Older single-weekend saves, field by field as they grew.
+function upgradeWeekend(s) {
+  for (const g of s.gear ?? []) g.skipped ??= false;
+  for (const p of s.people ?? []) { delete p.weight; delete p.skip; for (const k of CONTACT_FIELDS) p[k] ??= ''; }
+  for (const x of s.expenses ?? []) { x.for ??= null; x.calc ??= ''; }
+  for (const k of LISTS) {
+    if (s.buyers && !(k in s.buyers)) s.buyers[k] = null;
+    if (s.lists && !s.lists[k]) s.lists[k] = LISTS_TEMPLATE[k].map(it => ({ id: newId(), ...it, who: null, done: false }));
+    if (s.notes && !(k in s.notes)) s.notes[k] = NOTES_TEMPLATE[k].join('\n');
+  }
+  const e = s.event;
+  if (e && e.place === 'טרה קוטה' && !e.notes) Object.assign(e, { place: PLACE.place, checkin: e.checkin || PLACE.checkin, notes: PLACE.details.join('\n') });
+  return s;
+}
+
+// ---------- counts and money, for one event's view ----------
+
 // Families who said they're not coming drop out of the counts and the bill.
 export const payers = s => s.people.filter(p => p.coming !== 'no');
 export const coming = s => s.people.filter(p => p.coming === 'yes');
 export const adults = s => coming(s).reduce((n, p) => n + p.adults, 0);
 export const kids = s => coming(s).reduce((n, p) => n + p.kids, 0);
 export const veg = s => coming(s).reduce((n, p) => n + p.veg, 0);
-export const total = s => s.expenses.reduce((n, x) => n + x.amount, 0);
+// What has actually been paid, and what the event is expected to cost in all.
+export const total = s => s.expenses.filter(x => x.payer).reduce((n, x) => n + x.amount, 0);
+export const expected = s => s.expenses.reduce((n, x) => n + x.amount, 0);
 
-// Who owes what. Like the group always does it: every expense is split equally between
-// the families that are coming, except one entered for a single family (say, the extra
-// for a pricier unit), which that family carries alone. Money is in agorot, so no drift.
+// Split equally between the families that are coming, or all on one family for an
+// expense entered for that family only. Money is in agorot, so nothing drifts.
+function split(s, x, add) {
+  let members = x.for ? s.people.filter(p => p.id === x.for) : payers(s);
+  if (!members.length) members = s.people.filter(p => p.id === x.payer);
+  let left = x.amount;
+  const parts = members.map(p => { const v = Math.floor(x.amount / members.length); left -= v; return [p.id, v]; });
+  for (let i = 0; left > 0; i = (i + 1) % parts.length, left--) parts[i][1]++;
+  for (const [pid, v] of parts) add(pid, v);
+}
+
+// Who owes what. `share` is each family's part of everything, including costs nobody has
+// paid yet; balances and transfers only count what was actually paid.
 export function settle(s) {
-  const balance = Object.fromEntries(s.people.map(p => [p.id, 0]));
-  const share = Object.fromEntries(s.people.map(p => [p.id, 0]));
+  const zero = () => Object.fromEntries(s.people.map(p => [p.id, 0]));
+  const share = zero(), balance = zero();
   for (const x of s.expenses) {
+    split(s, x, (pid, v) => { share[pid] += v; });
+    if (!x.payer) continue;
     balance[x.payer] += x.amount;
-    let members = x.for ? s.people.filter(p => p.id === x.for) : payers(s);
-    if (!members.length) members = s.people.filter(p => p.id === x.payer);
-    let left = x.amount;
-    const parts = members.map(p => { const v = Math.floor(x.amount / members.length); left -= v; return [p.id, v]; });
-    for (let i = 0; left > 0; i = (i + 1) % parts.length, left--) parts[i][1]++;
-    for (const [pid, v] of parts) { share[pid] += v; balance[pid] -= v; }
+    split(s, x, (pid, v) => { balance[pid] -= v; });
   }
 
   const debtors = [], creditors = [];

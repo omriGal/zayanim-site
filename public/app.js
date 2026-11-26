@@ -1,4 +1,4 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, applyOp, newId, settle, payers, coming, adults, kids, veg, total, shekels } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
@@ -26,9 +26,11 @@ const local = {
 };
 
 let code = '';
-let server = null;     // last state confirmed by the server
+let server = null;     // last document confirmed by the server
 let revision = null;
-let state = null;      // server state + edits not yet confirmed
+let root = null;       // server document + edits not yet confirmed
+let eventId = null;    // the event being looked at; null = the list of events
+let state = null;      // view(root, eventId): that one event, as the screens use it
 let queue = [];        // edits waiting to be sent
 let sending = false;
 let offline = false;
@@ -53,18 +55,27 @@ async function api(method, body) {
 function accept(data) {
   server = data.state;
   revision = data.revision;
-  state = queue.reduce((s, op) => { try { return applyOp(s, op); } catch { return s; } }, server);
+  root = queue.reduce((r, op) => { try { return applyRootOp(r, op); } catch { return r; } }, server);
+  refreshView();
   render();
 }
 
+function refreshView() {
+  state = eventId ? view(root, eventId) : null;
+  if (eventId && !state) eventId = null; // someone removed it
+}
+
 // Apply an edit on screen right away, then send it in the background.
+// Edits made inside an event say which event they belong to.
 function send(op) {
   const before = state;
-  try { state = applyOp(state, op); } catch (e) { toast(e.message); return false; }
-  queue.push(op);
+  const full = state && !op.event && op.type !== 'addEvent' ? { ...op, event: eventId } : op;
+  try { root = applyRootOp(root, full); } catch (e) { toast(e.message); return false; }
+  refreshView();
+  queue.push(full);
   render();
   flush();
-  cameoFor(op, before);
+  if (before && state) cameoFor(op, before);
   return true;
 }
 
@@ -244,13 +255,18 @@ const short = d => d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numer
 const fmtDate = d => d ? new Date(d + 'T12:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 const toAgorot = v => Math.round(parseFloat(String(v).replace(',', '.')) * 100);
 
-function eventWhen() {
-  const e = state.event;
+const weekday = d => d.toLocaleDateString('he-IL', { weekday: 'long' }).replace(/^יום /, '');
+
+// "שישי-שבת 25-26.12.26 · עוד 29 ימים"
+function eventWhen(e = state.event) {
   if (!e.date) return 'תאריך? בתפריט';
-  const start = dayDate(e.date, 0), end = dayDate(e.date, 2);
+  const start = dayDate(e.date, 0), end = e.end ? dayDate(e.end, 0) : start;
   const days = Math.ceil((start - new Date()) / 86_400_000);
-  const left = days > 1 ? ` · עוד ${days} ימים` : days === 1 ? ' · מחר!' : days === 0 ? ' · היום!' : '';
-  return `חמישי-שבת ${start.getDate()}-${short(end)}.${String(end.getFullYear()).slice(2)}${left}`;
+  const left = days > 1 ? ` · עוד ${days} ימים` : days === 1 ? ' · מחר!' : days === 0 ? ' · היום!' : end < new Date() ? ' · עבר' : ' · עכשיו!';
+  const year = '.' + String(end.getFullYear()).slice(2);
+  if (e.end === e.date || !e.end) return `${weekday(start)} ${short(start)}${year}${left}`;
+  const range = start.getMonth() === end.getMonth() ? `${start.getDate()}-${short(end)}` : `${short(start)}-${short(end)}`;
+  return `${weekday(start)}-${weekday(end)} ${range}${year}${left}`;
 }
 
 function groupSummary() {
@@ -296,7 +312,9 @@ function updateSync() {
 
 let renderLater = false;
 function render() {
-  if (!state) return;
+  if (!root) return;
+  document.body.classList.toggle('picking', !state);
+  if (!state) return renderEvents();
   // A redraw must not close a dropdown someone is using. Wait until they leave it, plus a beat,
   // so the tap that moved focus away still lands on the button it was aimed at.
   const active = document.activeElement;
@@ -315,7 +333,7 @@ function render() {
   $('evMeta').textContent = eventWhen();
   $('evPlace').innerHTML = e.place ? (e.link ? `<a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.place)} ↗</a>` : esc(e.place)) + (e.checkin ? ` · ${esc(e.checkin)}` : '') : '';
   $('peopleChip').textContent = groupSummary();
-  $('moneyChip').textContent = 'בקופה: ' + shekels(total(state));
+  $('moneyChip').textContent = 'צפוי: ' + shekels(expected(state));
   document.title = e.title;
 
   $('tabs').innerHTML = TABS.map(t =>
@@ -325,6 +343,29 @@ function render() {
 
   for (const [id, value] of kept) { const el = $(id); if (el) el.value = value; }
   if (focused && $(focused) && $('view').contains($(focused))) $(focused).focus();
+  updateSync();
+}
+
+// The first screen: every event, soonest first, each opening into its own planning.
+function renderEvents() {
+  $('evTitle').textContent = 'האירועים שלנו';
+  $('evMeta').textContent = `${root.events.length} אירועים · ${root.people.length} משפחות`;
+  $('evPlace').innerHTML = '';
+  document.title = 'זיינים וזיינות';
+  const upcoming = [...root.events].sort((a, b) => (a.event.date || '9999').localeCompare(b.event.date || '9999'));
+  $('view').innerHTML = `
+  ${upcoming.map(({ event: e }) => {
+    const v = view(root, e.id);
+    const yes = coming(v).length, open = v.people.filter(p => p.coming === null).length;
+    return `<button class="event-card ${e.kind}" data-act="openEvent" data-id="${e.id}">
+      <span class="kind">${esc(KINDS[e.kind])}</span>
+      <b>${esc(e.title)}</b>
+      <span class="when">${esc(eventWhen(e))}</span>
+      ${e.place ? `<span class="where">${esc(e.place)}</span>` : ''}
+      <span class="stats">${familiesComing(yes)}${open ? ` · ${open} עוד לא ענו` : ''}${expected(v) ? ` · צפוי ${shekels(expected(v))}` : ''}</span>
+    </button>`;
+  }).join('')}
+  <button class="btn fire block" data-act="addEvent" style="margin-top:6px">+ אירוע חדש</button>`;
   updateSync();
 }
 
@@ -341,7 +382,7 @@ function homeView() {
   const noAnswer = state.people.filter(p => p.coming === null);
   const rolesOpen = LISTS.filter(k => !state.buyers[k]).length;
   const gearOpen = state.gear.filter(g => !g.who && !g.skipped).length;
-  const sum = total(state);
+  const sum = total(state), all = expected(state), families = payers(state).length;
   const { transfers } = settle(state);
   const openPay = transfers.filter(t => !state.paid.includes(t.key)).length;
   const step = (n, done, title, body, action = '') => `
@@ -353,7 +394,7 @@ function homeView() {
   ${step(1, e.place && e.date, 'קובעים מקום',
     `<p>${e.place ? `<b>${esc(e.place)}</b>` : 'עוד לא נקבע'}${e.date ? ` · ${esc(eventWhen())}` : ''}${e.checkin ? ` · ${esc(e.checkin)}` : ''}</p>
      ${e.notes ? `<ul class="place-details">${e.notes.split('\n').map(l => l.trim()).filter(Boolean).map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
-     ${e.link ? `<p class="small"><a href="${esc(e.link)}" target="_blank" rel="noopener">לדף הצימר ↗</a></p>` : ''}`,
+     ${e.link ? `<p class="small"><a href="${esc(e.link)}" target="_blank" rel="noopener">לדף המקום ↗</a></p>` : ''}`,
     `<button class="btn sm" data-act="editEvent">${e.place ? 'עריכה' : 'קביעת מקום ותאריך'}</button>`)}
   ${step(2, state.people.length && !noAnswer.length, 'מי מגיע',
     state.people.length
@@ -368,9 +409,10 @@ function homeView() {
   ${step(4, !gearOpen, 'ציוד שחוזר כל פעם',
     `<p>${gearOpen ? `ל-<b>${gearOpen}</b> פריטים מתוך ${state.gear.length} אין עדיין מי שמביא` : 'לכל פריט יש מי שמביא'}</p>`,
     `<button class="btn sm" data-act="goTab" data-tab="gear">חלוקת ציוד</button>`)}
-  ${step(5, sum && !openPay, 'מתחשבנים',
-    `<p>${sum ? `שולמו <b>${shekels(sum)}</b> · ${openPay ? `${openPay} העברות פתוחות` : 'הכל סגור'}` : 'בסוף כל אחד כותב כמה שילם'}</p>`,
-    `<button class="btn sm" data-act="goTab" data-tab="money">${sum ? 'להתחשבנות' : 'הוספת קבלה'}</button>`)}
+  ${step(5, sum && !openPay && sum === all, 'כמה זה עולה ומתחשבנים',
+    `<p>${all ? `צפוי <b>${shekels(all)}</b>${families ? `, כ-<b>${shekels(Math.round(all / families))}</b> למשפחה` : ''}` : 'מכניסים מחירים ידועים (למשל הצימר ללילה), ובסוף כל אחד כותב כמה שילם'}</p>
+     ${sum ? `<p class="small">שולמו ${shekels(sum)} · ${openPay ? `${openPay} העברות פתוחות` : 'הכל סגור'}</p>` : ''}`,
+    `<button class="btn sm" data-act="goTab" data-tab="money">${all ? 'לחשבון' : 'הוספת עלות'}</button>`)}
 `;
 }
 
@@ -460,34 +502,42 @@ function gearView() {
   ${notesBlock('gear')}`;
 }
 
+// Two kinds of lines: known costs nobody has paid yet (the zimmer before booking) and
+// expenses someone paid. Each family's part covers both; transfers only cover what was paid.
 function moneyView() {
   if (!state.people.length) return noPeopleHint();
-  const sum = total(state);
+  const all = expected(state), paidSum = total(state);
   const families = payers(state).length;
   const shared = state.expenses.filter(x => !x.for).reduce((n, x) => n + x.amount, 0);
   const { share, balance, transfers } = settle(state);
   const open = transfers.filter(t => !state.paid.includes(t.key)).length;
-  return `
-  <section class="receipt">
-    <div class="r-head"><b>חשבון סופי</b><span>${esc(state.event.title)}</span></div>
-    ${state.expenses.length ? state.expenses.map(x => `
-      <div class="r-line">
-        <button class="what" data-act="editExpense" data-id="${x.id}"><b>${esc(x.what)}</b><span>${esc(CATEGORY_LABELS[x.cat])} · שילמו ${esc(personName(x.payer))}${x.for ? ` · <b class="only">רק על ${esc(personName(x.for))}</b>` : ''}</span></button>
+  const line = x => `
+      <div class="r-line ${x.payer ? '' : 'unpaid'}">
+        <button class="what" data-act="editExpense" data-id="${x.id}"><b>${esc(x.what)}</b><span>${esc(CATEGORY_LABELS[x.cat])}${x.calc ? ` · ${esc(x.calc)}` : ''} · ${x.payer ? `שילמו ${esc(personName(x.payer))}` : '<b class="only">עוד לא שולם</b>'}${x.for ? ` · <b class="only">רק על ${esc(personName(x.for))}</b>` : ''}</span></button>
         <span class="amount">${shekels(x.amount)}</span>
         <button class="x" data-act="removeExpense" data-id="${x.id}" aria-label="מחיקה">×</button>
-      </div>`).join('') : '<div class="empty">עוד אין קבלות</div>'}
-    <div class="r-total"><span>סה״כ</span><b>${shekels(sum)}</b></div>
+      </div>`;
+  const unpaid = state.expenses.filter(x => !x.payer), paidLines = state.expenses.filter(x => x.payer);
+  return `
+  <section class="receipt">
+    <div class="r-head"><b>כמה זה עולה</b><span>${esc(state.event.title)}</span></div>
+    ${unpaid.length ? `<div class="r-sub">עלויות צפויות - עוד לא שולמו</div>${unpaid.map(line).join('')}` : ''}
+    ${paidLines.length ? `<div class="r-sub">שולם</div>${paidLines.map(line).join('')}` : ''}
+    ${state.expenses.length ? '' : '<div class="empty">עוד אין עלויות. אפשר להכניס גם מה שעוד לא שולם, כמו מחיר הצימר ללילה.</div>'}
+    <div class="r-total"><span>סה״כ</span><b>${shekels(all)}</b></div>
     <div class="r-split">
       <div><b>${families ? shekels(Math.round(shared / families)) : '—'}</b><span>לכל משפחה</span></div>
+      <div><b>${shekels(paidSum)}</b><span>שולם עד עכשיו</span></div>
       <div><b>${families}</b><span>משפחות</span></div>
     </div>
-    ${shared !== sum ? `<p class="r-note">ועוד ${shekels(sum - shared)} שנרשמו על משפחה מסוימת</p>` : ''}
-    <button class="btn fire block" data-act="addExpense" data-cat="">+ הוספת קבלה</button>
+    ${shared !== all ? `<p class="r-note">ועוד ${shekels(all - shared)} שנרשמו על משפחה מסוימת</p>` : ''}
+    <button class="btn fire block" data-act="addExpense" data-cat="">+ הוספת הוצאה או עלות צפויה</button>
   </section>
 
-  ${sum ? `
+  ${paidSum ? `
   <section class="card">
     <h2>מי מעביר למי <small>${open ? `${open} פתוחות` : 'הכל סגור'}</small></h2>
+    ${unpaid.length ? `<p class="small muted" style="margin-top:0">לפי מה ששולם בפועל. ${shekels(all - paidSum)} עוד לא שולמו ולכן לא נכנסו.</p>` : ''}
     ${transfers.length ? transfers.map(t => {
       const paid = state.paid.includes(t.key);
       return `<div class="ticket ${paid ? 'done' : ''}">
@@ -497,15 +547,16 @@ function moneyView() {
       </div>`;
     }).join('') : '<div class="empty">כולם שילמו בדיוק את החלק שלהם</div>'}
     <button class="btn block" data-act="copySettle" style="margin-top:6px">העתקה לוואטסאפ</button>
-  </section>
+  </section>` : ''}
 
+  ${all ? `
   <section class="card">
-    <h2>מאזן לכל משפחה</h2>
+    <h2>לכל משפחה</h2>
     <ul class="rows">${payers(state).map(p => {
       const paidBy = state.expenses.filter(x => x.payer === p.id).reduce((n, x) => n + x.amount, 0);
       const b = balance[p.id];
-      return `<li class="row"><div class="grow"><b>${esc(p.name)}</b><span class="sub">שילמו ${shekels(paidBy)} · החלק שלהם ${shekels(share[p.id])}</span></div>
-        <span class="amount ${b > 0 ? 'plus' : b < 0 ? 'minus' : ''}">${b > 0 ? 'מקבלים ' + shekels(b) : b < 0 ? 'משלמים ' + shekels(-b) : 'מאוזן'}</span></li>`;
+      return `<li class="row"><div class="grow"><b>${esc(p.name)}</b><span class="sub">החלק שלהם ${shekels(share[p.id])}${paidBy ? ` · שילמו ${shekels(paidBy)}` : ''}</span></div>
+        ${paidSum ? `<span class="amount ${b > 0 ? 'plus' : b < 0 ? 'minus' : ''}">${b > 0 ? 'מקבלים ' + shekels(b) : b < 0 ? 'משלמים ' + shekels(-b) : 'מאוזן'}</span>` : ''}</li>`;
     }).join('')}</ul>
   </section>` : ''}`;
 }
@@ -571,77 +622,102 @@ function itemDialog(k, it) {
   });
 }
 
+// An expense or a known cost. Nobody has to have paid yet ("עוד לא שולם"), and the amount
+// can be entered as price × units × nights, e.g. ₪1,000 a night × 11 units × 2 nights.
 function expenseDialog(x, cat) {
   const editing = Boolean(x);
-  x ||= { what: cat ? LIST_LABELS[cat] : '', amount: 0, payer: (cat && state.buyers[cat]) || '', cat: cat || 'other', for: null };
-  openDialog(`<h3>${editing ? 'עריכת הוצאה' : 'הוספת הוצאה'}</h3>
-    <label>על מה</label><input type="text" name="what" value="${esc(x.what)}" maxlength="120" required placeholder="למשל: קצביה, סופר, תוספת ליחידה">
-    <label>סכום (₪)</label><input type="number" name="amount" value="${x.amount ? x.amount / 100 : ''}" min="0.01" step="0.01" inputmode="decimal" required>
-    <label>מי שילם</label><select name="payer" required>${options(x.payer, 'בחרו')}</select>
+  const n = nights(state.event) || 1;
+  x ||= { what: cat ? LIST_LABELS[cat] : '', amount: 0, calc: '', payer: (cat && state.buyers[cat]) || null, cat: cat || 'other', for: null };
+  openDialog(`<h3>${editing ? 'עריכת הוצאה' : 'הוספת הוצאה או עלות צפויה'}</h3>
+    <label>על מה</label><input type="text" name="what" value="${esc(x.what)}" maxlength="120" required placeholder="למשל: הצימר, קצביה, סופר">
+    <label>מחיר (₪)</label><input type="number" name="price" value="${x.amount ? x.amount / 100 : ''}" min="0.01" step="0.01" inputmode="decimal" required>
+    <div class="calc-row">
+      <label>× יחידות<input type="number" name="units" value="1" min="1" max="100" step="1" inputmode="numeric"></label>
+      <label>× לילות<input type="number" name="nights" value="1" min="1" max="30" step="1" inputmode="numeric"></label>
+    </div>
+    <p class="small muted" style="margin:4px 0 0">למשל צימר: מחיר ללילה ליחידה × מספר היחידות × ${n} לילות. לסכום רגיל משאירים 1 ו-1.</p>
+    <p class="calc-total" id="calcTotal"></p>
+    <label>מי שילם</label><select name="payer">${options(x.payer, 'עוד לא שולם')}</select>
     <label>על חשבון</label><select name="for">${options(x.for, 'כולם, שווה בשווה')}</select>
     <p class="small muted" style="margin:4px 0 0">משפחה אחת רק כשההוצאה היא שלה בלבד, למשל ההפרש על יחידה יקרה יותר.</p>
     <label>קטגוריה</label><select name="cat">${CATEGORIES.map(c => `<option value="${c}" ${c === x.cat ? 'selected' : ''}>${esc(CATEGORY_LABELS[c])}</option>`).join('')}</select>
     <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
   d => {
-    const fields = { what: d.what.trim(), amount: toAgorot(d.amount), payer: d.payer, cat: d.cat, for: d.for || null };
+    const units = Math.max(1, parseInt(d.units, 10) || 1), times = Math.max(1, parseInt(d.nights, 10) || 1);
+    const price = toAgorot(d.price);
+    const calc = units > 1 || times > 1 ? [shekels(price), units > 1 && `${units} יחידות`, times > 1 && `${times} לילות`].filter(Boolean).join(' × ') : '';
+    const fields = { what: d.what.trim(), amount: price * units * times, calc, payer: d.payer || null, cat: d.cat, for: d.for || null };
     if (editing) send({ type: 'updateExpense', id: x.id, fields });
-    else if (send({ type: 'addExpense', id: newId(), ...fields })) toast('ההוצאה נוספה להתחשבנות');
+    else if (send({ type: 'addExpense', id: newId(), ...fields })) toast(fields.payer ? 'ההוצאה נוספה להתחשבנות' : 'העלות הצפויה נוספה');
   });
+  // Show the total as it's typed.
+  const f = $('dlgForm');
+  const update = () => {
+    const total = toAgorot(f.price.value || 0) * Math.max(1, +f.units.value || 1) * Math.max(1, +f.nights.value || 1);
+    $('calcTotal').textContent = total ? `סה״כ ${shekels(total)}` : '';
+  };
+  f.addEventListener('input', update);
+  update();
 }
 
 function eventDialog() {
   const e = state.event;
-  openDialog(`<h3>פרטי הסופ״ש</h3>
+  openDialog(`<h3>פרטי האירוע</h3>
     <label>שם</label><input type="text" name="title" value="${esc(e.title)}" maxlength="120" required>
-    <label>יום חמישי של הסופ״ש</label><input type="date" name="date" value="${esc(e.date)}">
-    <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר">
-    <label>קישור לצימר</label><input type="text" name="link" value="${esc(e.link)}" maxlength="300" placeholder="https://…" inputmode="url">
+    <div class="calc-row">
+      <label>מתאריך<input type="date" name="date" value="${esc(e.date)}"></label>
+      <label>עד<input type="date" name="end" value="${esc(e.end)}"></label>
+    </div>
+    <label>מקום</label><input type="text" name="place" value="${esc(e.place)}" maxlength="120" placeholder="שם הצימר / החניון">
+    <label>קישור למקום</label><input type="text" name="link" value="${esc(e.link)}" maxlength="300" placeholder="https://…" inputmode="url">
     <label>צ׳ק אין</label><input type="text" name="checkin" value="${esc(e.checkin)}" maxlength="120" placeholder="למשל: צ׳ק אין 14:30">
-    <label>פרטים על המקום (שורה לכל פרט)</label><textarea name="notes" rows="7" maxlength="2000" placeholder="בריכה, מנגלים, חדרים, טלפון…">${esc(e.notes)}</textarea>
-    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}</div>`,
-  d => {
+    <label>פרטים על המקום (שורה לכל פרט)</label><textarea name="notes" rows="7" maxlength="2000" placeholder="בריכה, מנגלים, מקלחות, טלפון…">${esc(e.notes)}</textarea>
+    <div class="actions"><button class="btn primary">שמירה</button>${cancelBtn}${root.events.length > 1 ? '<button class="btn danger" value="delete" formnovalidate>מחיקת האירוע</button>' : ''}</div>`,
+  (d, action) => {
+    if (action === 'delete') {
+      if (confirm(`למחוק את "${e.title}" על כל הרשימות שלו? אי אפשר לבטל.`) && send({ type: 'removeEvent', event: e.id })) { eventId = null; refreshView(); render(); }
+      return;
+    }
     const link = d.link.trim();
     if (link && !link.startsWith('https://')) return toast('הקישור צריך להתחיל ב-https://');
-    send({ type: 'setEvent', fields: { title: d.title.trim(), date: d.date, place: d.place.trim(), link, checkin: d.checkin.trim(), notes: d.notes.trim() } });
+    if (d.date && d.end && d.end < d.date) return toast('תאריך הסיום לפני תאריך ההתחלה');
+    send({ type: 'setEvent', fields: { title: d.title.trim(), date: d.date, end: d.end, place: d.place.trim(), link, checkin: d.checkin.trim(), notes: d.notes.trim() } });
   });
 }
 
-function newEventDialog() {
-  const { transfers } = settle(state);
-  const open = transfers.filter(t => !state.paid.includes(t.key)).length;
-  openDialog(`<h3>סיום וסופ״ש חדש</h3>
-    ${open ? `<p style="color:var(--red)">שימו לב: יש עוד ${open} העברות שלא סומנו כשולמו.</p>` : ''}
-    <p class="small muted">הסופ״ש הנוכחי יישמר בהיסטוריה עם סכום ההוצאות. המשפחות, הרשימות, הציוד והלקחים נשארים; מי מגיע, התפקידים, הסימונים וההוצאות מתאפסים.</p>
-    <label>שם הסופ״ש החדש</label><input type="text" name="title" value="${esc(state.event.title)}" maxlength="120" required>
-    <label>יום חמישי</label><input type="date" name="date">
+function addEventDialog() {
+  openDialog(`<h3>אירוע חדש</h3>
+    <label>סוג</label><select name="kind">${Object.entries(KINDS).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
+    <label>שם</label><input type="text" name="title" maxlength="120" required placeholder="למשל: קמפינג אבות וילדים - דצמבר">
+    <div class="calc-row">
+      <label>מתאריך<input type="date" name="date" required></label>
+      <label>עד<input type="date" name="end" required></label>
+    </div>
     <label>מקום</label><input type="text" name="place" maxlength="120">
-    <div class="actions"><button class="btn primary">פתיחת סופ״ש חדש</button>${cancelBtn}</div>`,
-  d => { if (send({ type: 'newEvent', id: newId(), title: d.title.trim(), date: d.date, place: d.place.trim() })) { tab = 'home'; render(); toast('סופ״ש חדש נפתח'); } });
-}
-
-function pastDialog() {
-  openDialog(`<h3>סופ״שים קודמים</h3>
-    ${state.past.length ? `<ul class="rows">${state.past.map(p => `<li class="row"><div class="grow"><b>${esc(p.title)}</b><span class="sub">${esc([fmtDate(p.date), p.place].filter(Boolean).join(' · '))}</span></div>
-      <span class="amount">${shekels(p.total)}${p.families ? `<span class="sub">${shekels(Math.round(p.total / p.families))} למשפחה</span>` : ''}</span></li>`).join('')}</ul>`
-      : '<p class="muted">עוד אין. כשסופ״ש נגמר, בחרו בתפריט "סיום וסופ״ש חדש".</p>'}
-    <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`);
+    <p class="small muted">המשפחות משותפות לכל האירועים. הרשימות מתחילות מהתבנית של סוג האירוע. בקמפינג אבות וילדים כל משפחה מתחילה עם מבוגר אחד.</p>
+    <div class="actions"><button class="btn primary">יצירה</button>${cancelBtn}</div>`,
+  d => {
+    if (d.end < d.date) return toast('תאריך הסיום לפני תאריך ההתחלה');
+    const id = newId();
+    if (send({ type: 'addEvent', id, kind: d.kind, title: d.title.trim(), date: d.date, end: d.end, place: d.place.trim() })) openEvent(id);
+  });
 }
 
 function menuDialog() {
   openDialog(`<h3>תפריט</h3>
     <div class="menu-list">
-      <button class="btn" value="event">פרטי הסופ״ש: תאריך, מקום, צ׳ק אין</button>
+      ${state ? '<button class="btn" value="event">פרטי האירוע: תאריכים, מקום, צ׳ק אין</button>' : ''}
+      ${state ? '<button class="btn" value="events">כל האירועים</button>' : ''}
+      <button class="btn" value="new">+ אירוע חדש</button>
       <button class="btn" value="share">שליחת קישור לקבוצה</button>
-      <button class="btn" value="new">סיום וסופ״ש חדש</button>
-      <button class="btn" value="past">סופ״שים קודמים</button>
       <button class="btn" value="logout">יציאה מהמכשיר הזה</button>
     </div>
     <div class="actions"><button class="btn" value="cancel">סגירה</button></div>`,
   (d, action) => {
     if (action === 'event') eventDialog();
+    if (action === 'events') openEvent(null);
+    if (action === 'new') addEventDialog();
     if (action === 'share') shareLink();
-    if (action === 'new') newEventDialog();
-    if (action === 'past') pastDialog();
     if (action === 'logout' && confirm('לצאת? תצטרכו את הקוד כדי להיכנס שוב.')) logout();
   });
 }
@@ -649,11 +725,21 @@ function menuDialog() {
 // The code rides in the #fragment, which browsers never send to the server.
 async function shareLink() {
   const url = `${location.origin}/${TEST ? '?test=1' : ''}#k=${encodeURIComponent(code)}`;
-  const text = `${state.event.title} - מי מגיע, תפקידים, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
+  const title = state?.event.title ?? 'זיינים וזיינות';
+  const text = `${title} - מי מגיע, תפקידים, ציוד והתחשבנות. הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏`;
   if (navigator.share) {
-    try { await navigator.share({ title: state.event.title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   copyText(`${text}\n${url}`, 'הקישור הועתק');
+}
+
+// null = back to the list of events.
+function openEvent(id) {
+  eventId = id;
+  refreshView();
+  if (state) tab = 'home';
+  render();
+  scrollTo(0, 0);
 }
 
 function goTab(next) {
@@ -666,6 +752,7 @@ function goTab(next) {
 // ---------- events ----------
 
 $('menuBtn').onclick = menuDialog;
+$('eventsChip').onclick = () => openEvent(null);
 $('peopleChip').onclick = () => goTab('people');
 $('moneyChip').onclick = () => goTab('money');
 $('tabs').addEventListener('click', e => {
@@ -710,6 +797,8 @@ $('view').addEventListener('click', e => {
   const el = e.target.closest('button[data-act]');
   if (!el) return;
   const { act, list, id, cat } = el.dataset;
+  if (act === 'openEvent') return openEvent(id);
+  if (act === 'addEvent') return addEventDialog();
   const p = id && person(id);
   switch (act) {
     case 'goPeople': return goTab('people');
@@ -754,7 +843,7 @@ $('view').addEventListener('click', e => {
     case 'editExpense': return expenseDialog(state.expenses.find(x => x.id === id));
     case 'removeExpense': {
       const x = state.expenses.find(v => v.id === id);
-      if (confirm(`למחוק את ההוצאה "${x.what}" (${shekels(x.amount)})?`)) send({ type: 'removeExpense', id });
+      if (confirm(`למחוק את "${x.what}" (${shekels(x.amount)})?`)) send({ type: 'removeExpense', id });
       return;
     }
     case 'copySettle': {

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyOp, defaultState, validState, upgrade, settle, total, adults, kids } from '../public/model.js';
+import { applyOp, applyRootOp, defaultRoot, defaultState, migrate, validRoot, validState, view, nights, settle, total, expected, adults, kids } from '../public/model.js';
 
 function weekend() {
   let s = defaultState();
@@ -60,23 +60,7 @@ test('families who are not coming drop out of the counts and the bill', () => {
   assert.throws(() => applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'maybe' } }));
 });
 
-test('gear marked "not needed this time" comes back next weekend', () => {
-  let s = weekend();
-  const id = s.gear[0].id;
-  s = applyOp(s, { type: 'updateGear', id, fields: { skipped: true } });
-  assert.equal(s.gear[0].skipped, true);
-  s = applyOp(s, { type: 'newEvent', id: 'next', title: 'הבא' });
-  assert.equal(s.gear[0].skipped, false);
-});
 
-test('older saved data without the skip flag is upgraded', () => {
-  const s = defaultState();
-  for (const g of s.gear) delete g.skipped;
-  s.people.push({ id: 'old', name: 'ישנים', phone: '', coming: null, adults: 2, kids: 0, veg: 0, weight: 1, skip: [] });
-  s.expenses.push({ id: 'e1', payer: 'old', amount: 100, what: 'x', cat: 'other' });
-  assert(!validState(s));
-  assert(validState(upgrade(s)));
-});
 
 test('each section keeps free-text notes, and families a phone number', () => {
   let s = weekend();
@@ -130,23 +114,63 @@ test('odd amounts still add up exactly', () => {
   assert.equal(Object.values(balance).reduce((a, b) => a + b, 0), 0);
 });
 
-test('a new weekend keeps families, lists and lessons, resets the rest', () => {
+
+test('events share families but keep their own answers, sizes, roles and money', () => {
+  let r = defaultRoot();
+  const may = r.events[0].event.id;
+  r = applyRootOp(r, { type: 'addPerson', event: may, id: 'dani', name: 'דני ומיכל', kids: 2 });
+  r = applyRootOp(r, { type: 'addEvent', id: 'dec', kind: 'camping', title: 'קמפינג אבות וילדים', date: '2026-12-25', end: '2026-12-26' });
+  const camp = view(r, 'dec');
+  assert.equal(camp.people[0].name, 'דני ומיכל');
+  assert.equal(camp.people[0].adults, 1, 'dads and kids: one adult to start');
+  assert.equal(camp.people[0].kids, 2);
+  assert(camp.gear.some(g => g.name === 'אוהלים'));
+  assert.equal(nights(camp.event), 1);
+  r = applyRootOp(r, { type: 'updatePerson', event: 'dec', id: 'dani', fields: { coming: 'yes', phone: '050-1234567' } });
+  r = applyRootOp(r, { type: 'setBuyer', event: 'dec', list: 'meat', person: 'dani' });
+  assert.equal(view(r, may).people[0].coming, null, 'answers are per event');
+  assert.equal(view(r, may).people[0].adults, 2);
+  assert.equal(view(r, may).people[0].phone, '050-1234567', 'contact details are shared');
+  assert.equal(view(r, may).buyers.meat, null);
+  assert(validRoot(r));
+});
+
+test('removing a family takes it out of every event, unless it has expenses somewhere', () => {
+  let r = defaultRoot();
+  const may = r.events[0].event.id;
+  r = applyRootOp(r, { type: 'addPerson', event: may, id: 'dani', name: 'דני' });
+  r = applyRootOp(r, { type: 'addEvent', id: 'dec', kind: 'camping', title: 'קמפינג', date: '2026-12-25', end: '2026-12-26' });
+  r = applyRootOp(r, { type: 'updateGear', event: 'dec', id: view(r, 'dec').gear[0].id, fields: { who: 'dani' } });
+  const paid = applyRootOp(r, { type: 'addExpense', event: 'dec', id: 'x', payer: 'dani', amount: 100, what: 'גז', cat: 'other' });
+  assert.throws(() => applyRootOp(paid, { type: 'removePerson', event: may, id: 'dani' }), /קמפינג/);
+  r = applyRootOp(r, { type: 'removePerson', event: may, id: 'dani' });
+  assert.equal(r.people.length, 0);
+  assert.equal(view(r, 'dec').gear[0].who, null);
+  assert(validRoot(r));
+});
+
+test('known costs can be entered before anyone pays; transfers only count what was paid', () => {
   let s = weekend();
-  const item = s.lists.meat[0].id;
-  s = applyOp(s, { type: 'updateItem', list: 'meat', id: item, fields: { done: true, who: 'dani' } });
-  s = applyOp(s, { type: 'setNotes', section: 'meat', text: 'היה חסר' });
-  s = applyOp(s, { type: 'updatePerson', id: 'dani', fields: { coming: 'yes' } });
-  s = applyOp(s, { type: 'setBuyer', list: 'meat', person: 'dani' });
-  s = pay(s, 'e1', 'dani', 12345, 'meat');
-  const oldId = s.event.id;
-  s = applyOp(s, { type: 'newEvent', id: 'next', title: 'חורף', date: '2027-12-16', place: 'גליל' });
-  assert.equal(s.people.length, 3);
-  assert.equal(s.lists.meat[0].done, false);
-  assert.equal(s.lists.meat[0].who, null);
-  assert.equal(s.notes.meat, 'היה חסר');
-  assert.equal(s.people[0].coming, null);
-  assert.equal(s.buyers.meat, null);
-  assert.equal(s.expenses.length, 0);
-  assert.deepEqual(s.past[0], { id: oldId, title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', place: 'אחוזת טרה קוטה, מעונה', total: 12345, families: 3 });
-  assert(validState(s));
+  s = applyOp(s, { type: 'addExpense', id: 'z', payer: null, amount: 2200000, what: 'הצימר', calc: '₪1,000 × 11 יחידות × 2 לילות', cat: 'lodging' });
+  s = pay(s, 'm', 'dani', 90000, 'meat');
+  assert.equal(expected(s), 2290000);
+  assert.equal(total(s), 90000);
+  const { share, balance, transfers } = settle(s);
+  assert.equal(share.levi, Math.round(2290000 / 3));
+  assert.equal(balance.dani, 60000);
+  assert.equal(transfers.reduce((n, t) => n + t.amount, 0), 60000);
+});
+
+test('a single-weekend save from before becomes the first event, old fields and all', () => {
+  const old = defaultState();
+  old.event = { ...old.event }; delete old.event.end; delete old.event.kind;
+  for (const g of old.gear) delete g.skipped;
+  old.people.push({ id: 'old', name: 'ישנים', phone: '', coming: 'no', adults: 2, kids: 1, veg: 0, weight: 1, skip: [] });
+  old.expenses.push({ id: 'e1', payer: 'old', amount: 100, what: 'x', cat: 'other' });
+  const r = migrate({ ...old, version: 5, past: [] });
+  assert(validRoot(r));
+  assert.equal(r.events.length, 1);
+  assert.equal(r.events[0].event.end, '2027-05-22');
+  assert.deepEqual(r.events[0].attend.old, { coming: 'no', adults: 2, kids: 1, veg: 0 });
+  assert.equal(r.events[0].expenses[0].for, null);
 });

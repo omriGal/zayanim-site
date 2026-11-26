@@ -235,6 +235,19 @@ dialog .actions .btn { flex: 1; }
 .contacts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
 .contacts a { color: var(--ink); }
 .contacts .wa { color: var(--moss); font-weight: 700; margin-inline-start: 6px; }
+.picking .chips, .picking nav.tabs { display: none; }
+.chip.back { border-color: var(--ember); color: var(--ember); }
+.event-card { display: grid; gap: 3px; width: 100%; text-align: right; background: var(--sheet); border: 2px solid var(--ink); border-radius: 4px; box-shadow: var(--hard); padding: 14px 16px; margin-bottom: 16px; font: inherit; color: var(--ink); }
+.event-card b { font-family: var(--display); font-size: 36px; line-height: .95; }
+.event-card .kind { justify-self: start; font-size: 12px; font-weight: 700; background: var(--pine); color: var(--sheet); border-radius: 99px; padding: 2px 10px; }
+.event-card.camping .kind { background: var(--fire); }
+.event-card .when { color: var(--fire); font-weight: 700; }
+.event-card .where, .event-card .stats { font-size: 14px; color: var(--muted); }
+.calc-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.calc-row label input { margin-top: 4px; }
+.calc-total { margin: 8px 0 0; font-weight: 700; color: var(--pine); }
+.r-sub { margin: 10px 0 2px; font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .5px; }
+.r-line.unpaid .amount { color: var(--muted); }
 .place-details { margin: 0 0 10px; padding-inline-start: 18px; display: grid; gap: 4px; font-size: 14px; }
 .notes { background: #fbf3df; border-style: dashed; box-shadow: none; }
 .notes h2 { font-size: 30px; }
@@ -332,6 +345,7 @@ textarea { width: 100%; border: 2px solid var(--ink); border-radius: 4px; paddin
         <button class="menu-btn" id="menuBtn" aria-label="תפריט"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></button>
       </div>
       <div class="chips">
+        <button class="chip back" id="eventsChip">↩ כל האירועים</button>
         <button class="chip" id="peopleChip"></button>
         <button class="chip num" id="moneyChip"></button>
       </div>
