@@ -1,4 +1,4 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, FEEDBACK, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels, portions, suggestList } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
@@ -506,6 +506,11 @@ function shopView() {
   const spent = exp.reduce((n, x) => n + x.amount, 0);
   const sorted = [...items.filter(i => !i.done), ...items.filter(i => i.done)];
   const a = adults(state), c = kids(state), v = veg(state);
+  // Once the event has started, each item can be marked: ran out / just right / too much.
+  const after = state.event.date && state.event.date <= new Date().toLocaleDateString('en-CA');
+  const fbRow = it => after || it.fb ? `<div class="fb">${Object.entries(FEEDBACK).filter(([f]) => f).map(([f, label]) =>
+    `<button class="${it.fb === f ? 'on ' + f : ''}" data-act="fb" data-list="${k}" data-id="${it.id}" data-v="${f}">${label}</button>`).join('')}</div>` : '';
+  const hint = suggestList(root, eventId, k);
   return `
   ${noPeopleHint()}
   <nav class="cats">${LISTS.map(l => {
@@ -536,10 +541,13 @@ function shopView() {
         <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
         <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}
           <span class="sub">${esc([it.qty, it.who && 'מביאים: ' + personName(it.who), it.note].filter(Boolean).join(' · '))}</span>
-</button></div>
+</button>${fbRow(it)}</div>
         <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
       </li>`).join('')}</ul>` : '<div class="empty">ריק פה. מה צריך?</div>'}
-    ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}" style="margin-top:14px">העתקת מה שחסר לוואטסאפ</button>` : ''}
+    <div class="list-actions">
+      ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}">העתקת מה שחסר לוואטסאפ</button>` : ''}
+      ${hint ? `<button class="btn sm fire" data-act="suggest" data-list="${k}">💡 כמויות לפי ${esc(hint.from.title)}</button>` : ''}
+    </div>
   </section>
   ${notesBlock(k)}`;
 }
@@ -700,6 +708,35 @@ function itemDialog(k, it) {
   (d, action) => {
     if (action === 'delete') send({ type: 'removeItem', list: k, id: it.id });
     else send({ type: 'updateItem', list: k, id: it.id, fields: { name: d.name.trim(), qty: d.qty.trim(), who: d.who || null, note: d.note.trim() } });
+  });
+}
+
+// Amounts for this event from the last one: scaled by headcount (a kid counts as half)
+// and by how each item went. Ticked lines update an item with the same name or add it.
+function suggestDialog(k) {
+  const g = suggestList(root, eventId, k);
+  if (!g) return toast('אין אירוע קודם עם רשימה כזאת');
+  const fmt = n => (Math.round(n * 10) / 10).toLocaleString('he-IL');
+  const pct = Math.round((g.scale - 1) * 100);
+  const head = g.portions
+    ? `${esc(g.from.title)}: ${fmt(g.fromPortions)} מנות. עכשיו מגיעים ${fmt(g.portions)} מנות${pct ? ` (${pct > 0 ? '+' : ''}${pct}%)` : ''}.`
+    : `עוד אף אחד לא אישר הגעה, אז הכמויות כמו ב${esc(g.from.title)}, עם התיקונים של מה שנגמר ומה שנשאר.`;
+  openDialog(`<h3>💡 כמויות ל${esc(LIST_LABELS[k])}</h3>
+    <p class="small">${head}<br><span class="muted">מבוגר = מנה, ילד = חצי. "נגמר" מוסיף 30%, "נשאר הרבה" מוריד 30%.</span></p>
+    <ul class="suggest">${g.items.map((it, i) => `<li><label>
+      <input type="checkbox" name="i${i}" ${it.same ? '' : 'checked'}>
+      <span><b>${esc(it.name)}</b>${it.fb ? ` <em class="fbtag ${it.fb}">${FEEDBACK[it.fb]}</em>` : ''}
+      <span class="sub">${it.was ? `${esc(it.was)} ← ` : ''}<b>${esc(it.qty || 'בלי כמות')}</b>${it.existing ? (it.same ? ' · כבר ברשימה' : ' · יעדכן את הקיים') : ' · חדש'}</span></span>
+    </label></li>`).join('')}</ul>
+    <div class="actions"><button class="btn primary">עדכון הרשימה</button>${cancelBtn}</div>`,
+  d => {
+    let n = 0;
+    g.items.forEach((it, i) => {
+      if (!d['i' + i]) return;
+      if (it.existing) { if (!it.same && send({ type: 'updateItem', list: k, id: it.existing, fields: { qty: it.qty } })) n++; }
+      else if (send({ type: 'addItem', list: k, id: newId(), name: it.name, qty: it.qty })) n++;
+    });
+    toast(n ? `עודכנו ${n} פריטים ✓` : 'לא השתנה כלום');
   });
 }
 
@@ -936,6 +973,11 @@ $('view').addEventListener('click', e => {
       local.set(SHOP_KEY, list);
       render();
       return showCameo(pickCameo(list));
+    case 'fb': {
+      const it = state.lists[list].find(i => i.id === id);
+      return send({ type: 'updateItem', list, id, fields: { fb: it.fb === el.dataset.v ? '' : el.dataset.v } });
+    }
+    case 'suggest': return suggestDialog(list);
     case 'editItem': return itemDialog(list, state.lists[list].find(i => i.id === id));
     case 'removeItem': return send({ type: 'removeItem', list, id });
     case 'copyList': {

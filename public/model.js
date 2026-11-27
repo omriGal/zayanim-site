@@ -14,6 +14,9 @@ export const LIST_LABELS = { meat: 'מנגל', alcohol: 'אלכוהול', genera
 export const CATEGORIES = [...LISTS, 'lodging', 'other'];
 export const CATEGORY_LABELS = { ...LIST_LABELS, lodging: 'לינה', other: 'אחר' };
 export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
+// After an event: was there enough of each item? Feeds the next event's suggested amounts.
+export const FEEDBACK = { '': '', short: 'נגמר', ok: 'בדיוק', over: 'נשאר הרבה' };
+const FEEDBACK_FACTOR = { short: 1.3, over: 0.7 };
 export const KINDS = { zimmer: 'סופ״ש בצימרים', camping: 'קמפינג אבות וילדים' };
 // Each section keeps free-text notes from earlier events.
 export const SECTIONS = [...LISTS, 'gear'];
@@ -106,7 +109,8 @@ function writeBack(root, w) {
 export function validState(s) {
   if (!onlyKeys(s, ['event', 'people', 'buyers', 'lists', 'gear', 'notes', 'expenses', 'paid'])) return false;
   const e = s.event;
-  if (!onlyKeys(e, ['id', 'kind', 'title', 'date', 'end', 'place', 'link', 'checkin', 'notes']) || !id(e.id) || !Object.hasOwn(KINDS, e.kind) || !name(e.title)) return false;
+  if (!onlyKeys(e, ['id', 'kind', 'title', 'date', 'end', 'place', 'link', 'checkin', 'notes', 'adults', 'kids']) || !id(e.id) || !Object.hasOwn(KINDS, e.kind) || !name(e.title)) return false;
+  if ((e.adults !== undefined && !count(e.adults, 300)) || (e.kids !== undefined && !count(e.kids, 300))) return false;
   if (!date(e.date) || !date(e.end) || (e.date && e.end && e.end < e.date) || !text(e.place, 120) || !url(e.link) || !text(e.checkin, 120) || !text(e.notes, 2000)) return false;
 
   if (!Array.isArray(s.people) || s.people.length > LIMITS.people) return false;
@@ -128,7 +132,8 @@ export function validState(s) {
     const list = s.lists[k];
     if (!Array.isArray(list) || list.length > LIMITS.items) return false;
     for (const it of list) {
-      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'who', 'done']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || !person(it.who) || typeof it.done !== 'boolean') return false;
+      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'who', 'done', 'fb']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || !person(it.who) || typeof it.done !== 'boolean') return false;
+      if (it.fb !== undefined && !Object.hasOwn(FEEDBACK, it.fb)) return false;
     }
   }
 
@@ -166,7 +171,7 @@ export function applyOp(state, op) {
 
   switch (op?.type) {
     case 'setEvent':
-      Object.assign(s.event, pick(op.fields, ['title', 'date', 'end', 'place', 'link', 'checkin', 'notes']));
+      Object.assign(s.event, pick(op.fields, ['title', 'date', 'end', 'place', 'link', 'checkin', 'notes', 'adults', 'kids']));
       break;
 
     case 'addPerson':
@@ -191,7 +196,7 @@ export function applyOp(state, op) {
       list(op.list).push({ id: op.id, name: str(op.name), qty: str(op.qty), note: '', who: null, done: false });
       break;
     case 'updateItem':
-      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'who', 'done']));
+      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'who', 'done', 'fb']));
       break;
     case 'removeItem':
       find(list(op.list), op.id);
@@ -389,3 +394,47 @@ export function settle(s) {
 }
 
 export const shekels = agorot => '₪' + (agorot / 100).toLocaleString('he-IL', { minimumFractionDigits: agorot % 100 ? 2 : 0, maximumFractionDigits: 2 });
+
+// ---------- amounts for next time ----------
+
+// A kid eats about half of what an adult does. An event from before the site, where nobody
+// marked who came, can carry the headcount on the event itself.
+export const portions = s => coming(s).length ? adults(s) + kids(s) / 2 : (s.event.adults || 0) + (s.event.kids || 0) / 2;
+
+// Every number in a quantity is scaled: "25" → "30", "10 / 4 / 10" → "12 / 5 / 12",
+// "1.5 ק״ג" → "2 ק״ג". Text without numbers ("שישיות", "חבילה") stays as it is.
+export function scaleQty(qty, f) {
+  if (Math.abs(f - 1) < 0.01) return qty;
+  return String(qty).replace(/\d+(?:\.\d+)?/g, m => {
+    const n = Number(m), v = n * f;
+    if (n >= 100) return String(Math.max(50, Math.round(v / 50) * 50));
+    if (m.includes('.')) return String(Math.max(0.5, Math.round(v * 2) / 2));
+    return String(Math.max(1, Math.round(v)));
+  });
+}
+
+const sameName = (a, b) => a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\s+/g, ' ');
+
+// The latest earlier event that had this list and a headcount, scaled to this event's
+// headcount and to how each item went ("נגמר" → 30% more, "נשאר הרבה" → 30% less).
+export function suggestList(root, eventId, k) {
+  const here = view(root, eventId);
+  if (!here || !LISTS.includes(k)) return null;
+  const before = root.events
+    .filter(e => e.event.id !== eventId && e.lists[k].length && (!here.event.date || !e.event.date || e.event.date < here.event.date))
+    .map(e => view(root, e.event.id))
+    .filter(v => portions(v) > 0)
+    .sort((a, b) => (b.event.date || '').localeCompare(a.event.date || ''));
+  const from = before[0];
+  if (!from) return null;
+  const now = portions(here);
+  const scale = now > 0 ? now / portions(from) : 1;
+  return {
+    from: from.event, fromPortions: portions(from), portions: now, scale,
+    items: from.lists[k].map(it => {
+      const qty = scaleQty(it.qty, scale * (FEEDBACK_FACTOR[it.fb] ?? 1));
+      const existing = here.lists[k].find(x => sameName(x.name, it.name));
+      return { name: it.name, was: it.qty, qty, fb: it.fb || '', existing: existing?.id || null, same: existing ? existing.qty === qty : false };
+    }),
+  };
+}
