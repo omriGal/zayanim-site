@@ -433,9 +433,13 @@ function renderEvents() {
   $('evMeta').textContent = `${root.events.length} אירועים · ${root.people.length} משפחות`;
   $('evPlace').innerHTML = '';
   document.title = 'זיינים וזיינות';
-  const upcoming = [...root.events].sort((a, b) => (a.event.date || '9999').localeCompare(b.event.date || '9999'));
-  $('view').innerHTML = `
-  ${upcoming.map(({ event: e }) => {
+  // Coming events first, soonest on top; ones that are over go to the bottom, latest first.
+  const today = new Date().toLocaleDateString('en-CA');
+  const isPast = e => e.date && (e.end || e.date) < today;
+  const byDate = (a, b) => (a.event.date || '9999').localeCompare(b.event.date || '9999');
+  const upcoming = root.events.filter(x => !isPast(x.event)).sort(byDate);
+  const past = root.events.filter(x => isPast(x.event)).sort(byDate).reverse();
+  const card = ({ event: e }) => {
     const v = view(root, e.id);
     const yes = coming(v).length, open = v.people.filter(p => p.coming === null).length;
     return `<button class="event-card ${e.kind}" data-act="openEvent" data-id="${e.id}">
@@ -445,8 +449,11 @@ function renderEvents() {
       ${e.place ? `<span class="where">${esc(e.place)}</span>` : ''}
       <span class="stats">${familiesComing(yes)}${open ? ` · ${open} עוד לא ענו` : ''}${expected(v) ? ` · צפוי ${shekels(expected(v))}` : ''}</span>
     </button>`;
-  }).join('')}
-  <button class="btn fire block" data-act="addEvent" style="margin-top:6px">+ אירוע חדש</button>`;
+  };
+  $('view').innerHTML = `
+  ${upcoming.map(card).join('')}
+  <button class="btn fire block" data-act="addEvent" style="margin-top:6px">+ אירוע חדש</button>
+  ${past.length ? `<h2 class="past-title">אירועים שעברו</h2><div class="past-events">${past.map(card).join('')}</div>` : ''}`;
   updateSync();
 }
 
