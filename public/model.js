@@ -415,16 +415,18 @@ export function scaleQty(qty, f) {
 
 const sameName = (a, b) => a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\s+/g, ' ');
 
-// The latest earlier event that had this list and a headcount, scaled to this event's
-// headcount and to how each item went ("נגמר" → 30% more, "נשאר הרבה" → 30% less).
-export function suggestList(root, eventId, k) {
+// The latest event that is already over, had this list and a headcount (the same kind of
+// event if there is one), scaled to this event's headcount and to how each item went
+// ("נגמר" → 30% more, "נשאר הרבה" → 30% less).
+export function suggestList(root, eventId, k, today = new Date().toLocaleDateString('en-CA')) {
   const here = view(root, eventId);
   if (!here || !LISTS.includes(k)) return null;
   const before = root.events
-    .filter(e => e.event.id !== eventId && e.lists[k].length && (!here.event.date || !e.event.date || e.event.date < here.event.date))
+    .filter(e => e.event.id !== eventId && e.lists[k].length && e.event.date && (e.event.end || e.event.date) < today
+      && (!here.event.date || e.event.date < here.event.date))
     .map(e => view(root, e.event.id))
     .filter(v => portions(v) > 0)
-    .sort((a, b) => (b.event.date || '').localeCompare(a.event.date || ''));
+    .sort((a, b) => (b.event.kind === here.event.kind) - (a.event.kind === here.event.kind) || b.event.date.localeCompare(a.event.date));
   const from = before[0];
   if (!from) return null;
   const now = portions(here);

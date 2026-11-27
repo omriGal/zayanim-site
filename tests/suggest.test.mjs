@@ -29,6 +29,11 @@ test('the next event gets the last one scaled by headcount and by what ran out',
   assert.equal(g.items.find(i => i.name === 'יוגורטים').existing, null);
   // a later event is never the source for an earlier one
   assert.equal(suggestList(r, 'sep', 'breakfast'), null);
+  // an event that hasn't happened yet is never the source, and the same kind comes first
+  r = applyRootOp(r, { type: 'addEvent', id: 'dec', kind: 'camping', title: 'דצמבר', date: '2026-12-25', end: '2026-12-26' });
+  r = applyRootOp(r, { type: 'setEvent', event: 'dec', fields: { adults: 10, kids: 20 } });
+  assert.equal(suggestList(r, next, 'breakfast', '2026-11-27').from.id, 'sep');
+  assert.equal(suggestList(r, next, 'breakfast', '2027-01-01').from.id, 'sep');
 });
 
 test('feedback only takes the known values', () => {
