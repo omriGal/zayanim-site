@@ -223,17 +223,58 @@ async function login(c, s = '') {
     $('app').hidden = false;
     accept(data);
     loadPhotos().then(() => { render(); morning(); });
+    pendingGrant();
   } catch (e) {
     if (e.status === 401) { local.del(CODE_KEY); local.del(SESSION_KEY); code = session = ''; }
     showGate(e.status === 401 ? (s ? e.message : 'הקוד לא נכון') : e.message);
   }
 }
 
-function showGate(error = '') {
+function showGate(error = '', asker = '') {
   $('app').hidden = true;
   $('gate').hidden = false;
   $('gateError').textContent = error;
+  askAccess(asker);
   offerGoogle();
+}
+
+// Someone whose Google email is on no family can email Mickey. The email carries a link
+// that opens the site (for anyone already inside) with a dialog to attach it to a family.
+const ADMIN_EMAIL = 'mickeyfine2@gmail.com';
+const GRANT_KEY = 'zayanim-grant';
+const NL = String.fromCharCode(10);
+function askAccess(email) {
+  const a = $('askAccess');
+  a.hidden = !email;
+  if (!email) return;
+  const body = ['היי מיקי,', '', `אשמח לגישה לאתר zayanim.xyz עם המייל ${email}.`, 'אני מהמשפחה של: ', '',
+    'לאישור (פותח את האתר ומצרף את המייל למשפחה):', location.origin + '/#grant=' + encodeURIComponent(email)].join(NL);
+  a.href = 'mailto:' + ADMIN_EMAIL + '?' + new URLSearchParams({ subject: 'בקשת גישה לזיינים וזיינות', body }).toString().replace(/\+/g, '%20');
+}
+
+const validEmail = e => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(e || '');
+function grantDialog(email) {
+  try { sessionStorage.removeItem(GRANT_KEY); } catch { /* ignore */ }
+  email = email.trim().toLowerCase();
+  if (!validEmail(email)) return toast('כתובת המייל בקישור לא תקינה');
+  const has = root.people.find(p => [p.email, p.email2].some(m => m?.trim().toLowerCase() === email));
+  if (has) return toast(`${email} כבר רשום על ${has.name}`);
+  openDialog(`<h3>מתן גישה</h3>
+    <p class="small"><span dir="ltr">${esc(email)}</span> יוכל להיכנס עם Google ולראות ולערוך הכל.</p>
+    <label>לאיזו משפחה לצרף</label>
+    <select name="who" required><option value="">בחרו משפחה</option>${root.people.map(p => `<option value="${p.id}">${esc(p.name)}${p.email && p.email2 ? ' (יחליף את המייל הנוסף)' : ''}</option>`).join('')}</select>
+    <div class="actions"><button class="btn primary">לתת גישה</button>${cancelBtn}</div>`,
+  d => {
+    const p = root.people.find(x => x.id === d.who);
+    if (!p) return;
+    const field = !p.email ? 'email' : 'email2';
+    if (send({ type: 'updatePerson', event: eventId || root.events[0].event.id, id: p.id, fields: { [field]: email } })) toast(`${email} צורף ל${p.name} ✓`);
+  });
+}
+function pendingGrant() {
+  let g = null;
+  try { g = sessionStorage.getItem(GRANT_KEY); } catch { /* ignore */ }
+  if (g) grantDialog(g);
 }
 
 function logout(msg = '') {
@@ -267,7 +308,7 @@ async function googleReturn(credential) {
   try {
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential, nonce }) });
     const data = await r.json();
-    if (!r.ok) return showGate(data.error || 'הכניסה עם Google לא הצליחה');
+    if (!r.ok) return showGate(data.error || 'הכניסה עם Google לא הצליחה', r.status === 403 ? data.email : '');
     login('', data.session);
   } catch { showGate('אין חיבור לשרת, נסו שוב'); }
 }
@@ -953,6 +994,7 @@ $('view').addEventListener('click', e => {
 const fragment = new URLSearchParams(location.hash.slice(1));
 const fromLink = fragment.get('k');
 if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+if (fragment.get('grant')) try { sessionStorage.setItem(GRANT_KEY, fragment.get('grant')); } catch { /* ignore */ }
 if (fragment.get('id_token')) googleReturn(fragment.get('id_token'));
 else if (fragment.get('error')) showGate('הכניסה עם Google בוטלה');
 else if (fromLink || local.get(CODE_KEY)) login(fromLink || local.get(CODE_KEY));

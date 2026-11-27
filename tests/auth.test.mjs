@@ -57,7 +57,9 @@ test('a family member signs in with Google and can then read and write', async (
 test('an email that is not on any family is refused', async () => {
   const h = harness();
   await withDani(h);
-  assert.equal((await h.signIn(token({ email: 'stranger@example.com' }))).status, 403);
+  const r = await h.signIn(token({ email: 'stranger@example.com' }));
+  assert.equal(r.status, 403);
+  assert.equal((await r.json()).email, 'stranger@example.com');
 });
 
 test('a token for another site, another attempt, unverified or rejected by Google is refused', async () => {
