@@ -17,6 +17,8 @@ export const COMING = { yes: 'מגיעים', no: 'לא מגיעים' };
 // After an event: was there enough of each item? Feeds the next event's suggested amounts.
 export const FEEDBACK = { '': '', short: 'נגמר', ok: 'בדיוק', over: 'נשאר הרבה' };
 const FEEDBACK_FACTOR = { short: 1.3, over: 0.7 };
+// For drinks: did we like it? Tells whether to bring the same one next time.
+export const LIKED = { '': '', yes: 'אהבנו', no: 'לא אהבנו' };
 export const KINDS = { zimmer: 'סופ״ש בצימרים', camping: 'קמפינג אבות וילדים' };
 // Each section keeps free-text notes from earlier events.
 export const SECTIONS = [...LISTS, 'gear'];
@@ -132,8 +134,9 @@ export function validState(s) {
     const list = s.lists[k];
     if (!Array.isArray(list) || list.length > LIMITS.items) return false;
     for (const it of list) {
-      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'who', 'done', 'fb']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || !person(it.who) || typeof it.done !== 'boolean') return false;
+      if (!onlyKeys(it, ['id', 'name', 'qty', 'note', 'who', 'done', 'fb', 'liked']) || !fresh(it.id) || !name(it.name) || !text(it.qty, 60) || !text(it.note, 300) || !person(it.who) || typeof it.done !== 'boolean') return false;
       if (it.fb !== undefined && !Object.hasOwn(FEEDBACK, it.fb)) return false;
+      if (it.liked !== undefined && !Object.hasOwn(LIKED, it.liked)) return false;
     }
   }
 
@@ -196,7 +199,7 @@ export function applyOp(state, op) {
       list(op.list).push({ id: op.id, name: str(op.name), qty: str(op.qty), note: '', who: null, done: false });
       break;
     case 'updateItem':
-      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'who', 'done', 'fb']));
+      Object.assign(find(list(op.list), op.id), pick(op.fields, ['name', 'qty', 'note', 'who', 'done', 'fb', 'liked']));
       break;
     case 'removeItem':
       find(list(op.list), op.id);
@@ -436,7 +439,20 @@ export function suggestList(root, eventId, k, today = new Date().toLocaleDateStr
     items: from.lists[k].map(it => {
       const qty = scaleQty(it.qty, scale * (FEEDBACK_FACTOR[it.fb] ?? 1));
       const existing = here.lists[k].find(x => sameName(x.name, it.name));
-      return { name: it.name, was: it.qty, qty, fb: it.fb || '', existing: existing?.id || null, same: existing ? existing.qty === qty : false };
+      return { name: it.name, was: it.qty, qty, fb: it.fb || '', liked: it.liked || '', existing: existing?.id || null, same: existing ? existing.qty === qty : false };
     }),
   };
+}
+
+// What the group thought of each item the last time it was there: name → { liked, title }.
+// Only events that are over and came before this one count; the latest verdict wins.
+export function verdicts(root, eventId, k, today = new Date().toLocaleDateString('en-CA')) {
+  const here = root.events.find(e => e.event.id === eventId);
+  const out = new Map();
+  if (!here || !LISTS.includes(k)) return out;
+  root.events
+    .filter(e => e !== here && e.event.date && (e.event.end || e.event.date) < today && (!here.event.date || e.event.date < here.event.date))
+    .sort((a, b) => a.event.date.localeCompare(b.event.date))
+    .forEach(e => e.lists[k].forEach(it => { if (it.liked) out.set(it.name.trim(), { liked: it.liked, title: e.event.title }); }));
+  return out;
 }

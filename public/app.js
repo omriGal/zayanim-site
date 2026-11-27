@@ -1,4 +1,4 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, FEEDBACK, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels, portions, suggestList } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, FEEDBACK, LIKED, verdicts, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels, portions, suggestList } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
@@ -508,8 +508,14 @@ function shopView() {
   const a = adults(state), c = kids(state), v = veg(state);
   // Once the event has started, each item can be marked: ran out / just right / too much.
   const after = state.event.date && state.event.date <= new Date().toLocaleDateString('en-CA');
-  const fbRow = it => after || it.fb ? `<div class="fb">${Object.entries(FEEDBACK).filter(([f]) => f).map(([f, label]) =>
-    `<button class="${it.fb === f ? 'on ' + f : ''}" data-act="fb" data-list="${k}" data-id="${it.id}" data-v="${f}">${label}</button>`).join('')}</div>` : '';
+  const drinks = k === 'alcohol';
+  const fbRow = it => after || it.fb || it.liked ? `<div class="fb">${Object.entries(FEEDBACK).filter(([f]) => f).map(([f, label]) =>
+    `<button class="${it.fb === f ? 'on ' + f : ''}" data-act="fb" data-list="${k}" data-id="${it.id}" data-v="${f}">${label}</button>`).join('')}${drinks ?
+    `<span class="fb-gap"></span>${Object.entries(LIKED).filter(([f]) => f).map(([f, label]) =>
+    `<button class="${it.liked === f ? 'on like-' + f : ''}" data-act="liked" data-list="${k}" data-id="${it.id}" data-v="${f}">${f === 'yes' ? '👍' : '👎'} ${label}</button>`).join('')}` : ''}</div>` : '';
+  // Before the event: what we thought of the same item last time.
+  const past = after ? new Map() : verdicts(root, eventId, k);
+  const pastTag = it => { const v = past.get(it.name.trim()); return v ? `<em class="fbtag like-${v.liked}">${v.liked === 'yes' ? '👍' : '👎'} ${LIKED[v.liked]} ב${esc(v.title)}</em>` : ''; };
   const hint = suggestList(root, eventId, k);
   return `
   ${noPeopleHint()}
@@ -539,7 +545,7 @@ function shopView() {
     ${items.length ? `<ul class="rows">${sorted.map(it => `
       <li class="row ${it.done ? 'done' : ''}">
         <input type="checkbox" class="check" data-act="toggleItem" data-list="${k}" data-id="${it.id}" ${it.done ? 'checked' : ''} aria-label="נקנה">
-        <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)}
+        <div class="grow"><button class="title" data-act="editItem" data-list="${k}" data-id="${it.id}">${esc(it.name)} ${pastTag(it)}
           <span class="sub">${esc([it.qty, it.who && 'מביאים: ' + personName(it.who), it.note].filter(Boolean).join(' · '))}</span>
 </button>${fbRow(it)}</div>
         <button class="x" data-act="removeItem" data-list="${k}" data-id="${it.id}" aria-label="מחיקה">×</button>
@@ -724,8 +730,8 @@ function suggestDialog(k) {
   openDialog(`<h3>💡 כמויות ל${esc(LIST_LABELS[k])}</h3>
     <p class="small">${head}<br><span class="muted">מבוגר = מנה, ילד = חצי. "נגמר" מוסיף 30%, "נשאר הרבה" מוריד 30%.</span></p>
     <ul class="suggest">${g.items.map((it, i) => `<li><label>
-      <input type="checkbox" name="i${i}" ${it.same ? '' : 'checked'}>
-      <span><b>${esc(it.name)}</b>${it.fb ? ` <em class="fbtag ${it.fb}">${FEEDBACK[it.fb]}</em>` : ''}
+      <input type="checkbox" name="i${i}" ${it.same || it.liked === 'no' ? '' : 'checked'}>
+      <span><b>${esc(it.name)}</b>${it.fb ? ` <em class="fbtag ${it.fb}">${FEEDBACK[it.fb]}</em>` : ''}${it.liked ? ` <em class="fbtag like-${it.liked}">${it.liked === 'yes' ? '👍' : '👎'} ${LIKED[it.liked]}</em>` : ''}
       <span class="sub">${it.was ? `${esc(it.was)} ← ` : ''}<b>${esc(it.qty || 'בלי כמות')}</b>${it.existing ? (it.same ? ' · כבר ברשימה' : ' · יעדכן את הקיים') : ' · חדש'}</span></span>
     </label></li>`).join('')}</ul>
     <div class="actions"><button class="btn primary">עדכון הרשימה</button>${cancelBtn}</div>`,
@@ -976,6 +982,10 @@ $('view').addEventListener('click', e => {
     case 'fb': {
       const it = state.lists[list].find(i => i.id === id);
       return send({ type: 'updateItem', list, id, fields: { fb: it.fb === el.dataset.v ? '' : el.dataset.v } });
+    }
+    case 'liked': {
+      const it = state.lists[list].find(i => i.id === id);
+      return send({ type: 'updateItem', list, id, fields: { liked: it.liked === el.dataset.v ? '' : el.dataset.v } });
     }
     case 'suggest': return suggestDialog(list);
     case 'editItem': return itemDialog(list, state.lists[list].find(i => i.id === id));

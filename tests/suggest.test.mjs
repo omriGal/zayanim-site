@@ -42,3 +42,15 @@ test('feedback only takes the known values', () => {
   assert.equal(applyRootOp(r, { type: 'updateItem', event: e, list: 'meat', id: it, fields: { fb: 'over' } }).events[0].lists.meat[0].fb, 'over');
   assert.throws(() => applyRootOp(r, { type: 'updateItem', event: e, list: 'meat', id: it, fields: { fb: 'lots' } }));
 });
+
+test('a wine we did not like shows up as such before the next event', async () => {
+  const { verdicts } = await import('../public/model.js');
+  let r = defaultRoot();
+  const next = r.events[0].event.id;
+  r = applyRootOp(r, { type: 'addEvent', id: 'sep', kind: 'zimmer', title: 'ספטמבר', date: '2026-09-17', end: '2026-09-19' });
+  r = applyRootOp(r, { type: 'addItem', event: 'sep', list: 'alcohol', id: 'w1', name: 'אוז שיראז', qty: '1' });
+  r = applyRootOp(r, { type: 'updateItem', event: 'sep', list: 'alcohol', id: 'w1', fields: { liked: 'no' } });
+  assert.deepEqual(verdicts(r, next, 'alcohol', '2026-11-27').get('אוז שיראז'), { liked: 'no', title: 'ספטמבר' });
+  assert.equal(verdicts(r, 'sep', 'alcohol', '2026-11-27').size, 0);
+  assert.throws(() => applyRootOp(r, { type: 'updateItem', event: 'sep', list: 'alcohol', id: 'w1', fields: { liked: 'meh' } }));
+});
