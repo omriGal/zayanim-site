@@ -423,15 +423,8 @@ const sameName = (a, b) => a.trim().replace(/\s+/g, ' ') === b.trim().replace(/\
 // ("נגמר" → 30% more, "נשאר הרבה" → 30% less).
 export function suggestList(root, eventId, k, today = new Date().toLocaleDateString('en-CA')) {
   const here = view(root, eventId);
-  if (!here || !LISTS.includes(k)) return null;
-  const before = root.events
-    .filter(e => e.event.id !== eventId && e.lists[k].length && e.event.date && (e.event.end || e.event.date) < today
-      && (!here.event.date || e.event.date < here.event.date))
-    .map(e => view(root, e.event.id))
-    .filter(v => portions(v) > 0)
-    .sort((a, b) => (b.event.kind === here.event.kind) - (a.event.kind === here.event.kind) || b.event.date.localeCompare(a.event.date));
-  const from = before[0];
-  if (!from) return null;
+  const from = previousEvent(root, eventId, k, today);
+  if (!here || !from) return null;
   const now = portions(here);
   const scale = now > 0 ? now / portions(from) : 1;
   return {
@@ -442,6 +435,19 @@ export function suggestList(root, eventId, k, today = new Date().toLocaleDateStr
       return { name: it.name, was: it.qty, qty, fb: it.fb || '', liked: it.liked || '', existing: existing?.id || null, same: existing ? existing.qty === qty : false };
     }),
   };
+}
+
+// The latest event that is already over and had this list and a headcount, as a view.
+export function previousEvent(root, eventId, k, today = new Date().toLocaleDateString('en-CA')) {
+  const here = view(root, eventId);
+  if (!here || !LISTS.includes(k)) return null;
+  const before = root.events
+    .filter(e => e.event.id !== eventId && e.lists[k].length && e.event.date && (e.event.end || e.event.date) < today
+      && (!here.event.date || e.event.date < here.event.date))
+    .map(e => view(root, e.event.id))
+    .filter(v => portions(v) > 0)
+    .sort((a, b) => (b.event.kind === here.event.kind) - (a.event.kind === here.event.kind) || b.event.date.localeCompare(a.event.date));
+  return before[0] || null;
 }
 
 // What the group thought of each item the last time it was there: name → { liked, title }.

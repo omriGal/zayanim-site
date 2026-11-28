@@ -1,4 +1,4 @@
-import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, FEEDBACK, LIKED, verdicts, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels, portions, suggestList } from './model.js';
+import { LISTS, LIST_LABELS, CATEGORIES, CATEGORY_LABELS, COMING, KINDS, FEEDBACK, LIKED, verdicts, applyRootOp, view, nights, newId, settle, payers, coming, adults, kids, veg, total, expected, shekels, portions, suggestList, previousEvent } from './model.js';
 
 const TEST = new URLSearchParams(location.search).get('test') === '1';
 const API = '/api/list' + (TEST ? '?test=1' : '');
@@ -524,6 +524,7 @@ function shopView() {
   const past = after ? new Map() : verdicts(root, eventId, k);
   const pastTag = it => { const v = past.get(it.name.trim()); return v ? `<em class="fbtag like-${v.liked}">${v.liked === 'yes' ? '👍' : '👎'} ${LIKED[v.liked]} ב${esc(v.title)}</em>` : ''; };
   const hint = suggestList(root, eventId, k);
+  const prev = previousEvent(root, eventId, k);
   return `
   ${noPeopleHint()}
   <nav class="cats">${LISTS.map(l => {
@@ -560,6 +561,7 @@ function shopView() {
     <div class="list-actions">
       ${items.length ? `<button class="btn sm" data-act="copyList" data-list="${k}">העתקת מה שחסר לוואטסאפ</button>` : ''}
       ${hint ? `<button class="btn sm fire" data-act="suggest" data-list="${k}">💡 כמויות לפי ${esc(hint.from.title)}</button>` : ''}
+      ${prev ? `<button class="btn sm" data-act="lastTime" data-list="${k}">🧾 מה קנינו ב${esc(prev.event.title)}</button>` : ''}
     </div>
   </section>
   ${notesBlock(k)}`;
@@ -751,6 +753,19 @@ function suggestDialog(k) {
     });
     toast(n ? `עודכנו ${n} פריטים ✓` : 'לא השתנה כלום');
   });
+}
+
+// Exactly what was bought for this list last time, with the breakdown kept in each note.
+function lastTimeDialog(k) {
+  const prev = previousEvent(root, eventId, k);
+  if (!prev) return toast('אין אירוע קודם עם רשימה כזאת');
+  const fmt = n => (Math.round(n * 10) / 10).toLocaleString('he-IL');
+  const paid = prev.expenses.filter(x => x.cat === k && x.payer).reduce((n, x) => n + x.amount, 0);
+  openDialog(`<h3>🧾 ${esc(LIST_LABELS[k])} ב${esc(prev.event.title)}</h3>
+    <p class="small muted">${fmt(portions(prev))} מנות (מבוגר = מנה, ילד = חצי)${paid ? ` · שולם ${shekels(paid)}` : ''}</p>
+    <ul class="suggest">${prev.lists[k].map(it => `<li><span><b>${esc(it.name)}</b>${it.qty ? ` · ${esc(it.qty)}` : ''}${it.fb ? ` <em class="fbtag ${it.fb}">${FEEDBACK[it.fb]}</em>` : ''}${it.liked ? ` <em class="fbtag like-${it.liked}">${it.liked === 'yes' ? '👍' : '👎'} ${LIKED[it.liked]}</em>` : ''}
+      ${it.note ? `<span class="sub">${esc(it.note)}</span>` : ''}</span></li>`).join('')}</ul>
+    <div class="actions"><button class="btn primary" value="cancel" formnovalidate>סגירה</button></div>`, () => {});
 }
 
 // An expense or a known cost. Nobody has to have paid yet ("עוד לא שולם"), and the amount
@@ -995,6 +1010,7 @@ $('view').addEventListener('click', e => {
       return send({ type: 'updateItem', list, id, fields: { liked: it.liked === el.dataset.v ? '' : el.dataset.v } });
     }
     case 'suggest': return suggestDialog(list);
+    case 'lastTime': return lastTimeDialog(list);
     case 'editItem': return itemDialog(list, state.lists[list].find(i => i.id === id));
     case 'removeItem': return send({ type: 'removeItem', list, id });
     case 'copyList': {
