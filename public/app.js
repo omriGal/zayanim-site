@@ -429,10 +429,10 @@ function render() {
 
 // The first screen: every event, soonest first, each opening into its own planning.
 function renderEvents() {
-  $('evTitle').textContent = 'האירועים שלנו';
+  $('evTitle').textContent = 'אירועים קרובים';
   $('evMeta').textContent = `${root.events.length} אירועים · ${root.people.length} משפחות`;
   $('evPlace').innerHTML = '';
-  document.title = 'האירועים שלנו';
+  document.title = 'אירועים קרובים';
   // Coming events first, soonest on top; ones that are over go to the bottom, latest first.
   const today = new Date().toLocaleDateString('en-CA');
   const isPast = e => e.date && (e.end || e.date) < today;
@@ -903,7 +903,7 @@ function inviteDialog() {
 // The code rides in the #fragment, which browsers never send to the server.
 async function shareLink() {
   const url = `${location.origin}/${TEST ? '?test=1' : ''}${code ? '#k=' + encodeURIComponent(code) : ''}`;
-  const title = state?.event.title ?? 'האירועים שלנו';
+  const title = state?.event.title ?? 'אירועים קרובים';
   const text = `${title} - מי מגיע, תפקידים, ציוד והתחשבנות. ${code ? 'הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏' : 'נכנסים עם חשבון ה-Google שלכם.'}`;
   if (navigator.share) {
     try { await navigator.share({ title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
