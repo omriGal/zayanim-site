@@ -249,7 +249,7 @@ function askAccess(email) {
   if (!email) return;
   const body = ['היי מיקי,', '', `אשמח לגישה לאתר zayanim.xyz עם המייל ${email}.`, 'אני מהמשפחה של: ', '',
     'לאישור (פותח את האתר ומצרף את המייל למשפחה):', location.origin + '/#grant=' + encodeURIComponent(email)].join(NL);
-  a.href = 'mailto:' + ADMIN_EMAIL + '?' + new URLSearchParams({ subject: 'בקשת גישה לזיינים וזיינות', body }).toString().replace(/\+/g, '%20');
+  a.href = 'mailto:' + ADMIN_EMAIL + '?' + new URLSearchParams({ subject: 'בקשת גישה לאתר האירועים', body }).toString().replace(/\+/g, '%20');
 }
 
 const validEmail = e => /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(e || '');
@@ -432,7 +432,7 @@ function renderEvents() {
   $('evTitle').textContent = 'האירועים שלנו';
   $('evMeta').textContent = `${root.events.length} אירועים · ${root.people.length} משפחות`;
   $('evPlace').innerHTML = '';
-  document.title = 'זיינים וזיינות';
+  document.title = 'האירועים שלנו';
   // Coming events first, soonest on top; ones that are over go to the bottom, latest first.
   const today = new Date().toLocaleDateString('en-CA');
   const isPast = e => e.date && (e.end || e.date) < today;
@@ -834,7 +834,7 @@ function eventDialog() {
 function addEventDialog() {
   openDialog(`<h3>אירוע חדש</h3>
     <label>סוג</label><select name="kind">${Object.entries(KINDS).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('')}</select>
-    <label>שם</label><input type="text" name="title" maxlength="120" required placeholder="למשל: קמפינג אבות וילדים - דצמבר">
+    <label>שם</label><input type="text" name="title" maxlength="120" required placeholder="מקום, חודש ושנה - למשל: חאן השיירות, דצמבר 2026">
     <div class="calc-row">
       <label>מתאריך<input type="date" name="date" required></label>
       <label>עד<input type="date" name="end" required></label>
@@ -903,7 +903,7 @@ function inviteDialog() {
 // The code rides in the #fragment, which browsers never send to the server.
 async function shareLink() {
   const url = `${location.origin}/${TEST ? '?test=1' : ''}${code ? '#k=' + encodeURIComponent(code) : ''}`;
-  const title = state?.event.title ?? 'זיינים וזיינות';
+  const title = state?.event.title ?? 'האירועים שלנו';
   const text = `${title} - מי מגיע, תפקידים, ציוד והתחשבנות. ${code ? 'הקישור כולל את הקוד, אז רק בקבוצה שלנו 🙏' : 'נכנסים עם חשבון ה-Google שלכם.'}`;
   if (navigator.share) {
     try { await navigator.share({ title, text, url }); return; } catch (e) { if (e.name === 'AbortError') return; }

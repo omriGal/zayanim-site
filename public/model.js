@@ -71,7 +71,7 @@ function newEvent({ id: eid = newId(), kind = 'zimmer', title, date: start = '',
 }
 
 const MAY = () => newEvent({
-  title: 'זיינים וזיינות - מאי 2027', date: '2027-05-20', end: '2027-05-22', place: PLACE.place,
+  title: 'אחוזת טרה קוטה, מאי 2027', date: '2027-05-20', end: '2027-05-22', place: PLACE.place,
   link: 'https://www.weekend.co.il/zimmers/tera-kota', checkin: PLACE.checkin, notes: PLACE.details.join('\n'),
 });
 
